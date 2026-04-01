@@ -13,11 +13,11 @@ interface QuickAddProps {
 export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps) {
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Form state for detailed mode
+  // Form state — date and type are always visible now
   const [type, setType] = useState<TaskType>('task');
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [dueDate, setDueDate] = useState('');
@@ -26,7 +26,10 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
   const [contactId, setContactId] = useState('');
   const [description, setDescription] = useState('');
 
+  // Set today as default date
   useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setDueDate(today);
     inputRef.current?.focus();
   }, []);
 
@@ -41,7 +44,7 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.lang = 'en-IN'; // Indian English, change as needed
+    recognition.lang = 'en-IN';
 
     recognition.onstart = () => setIsListening(true);
 
@@ -50,6 +53,18 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
         .map((result: any) => result[0].transcript)
         .join('');
       setInput(transcript);
+
+      // Auto-detect and fill fields from voice input
+      if (event.results[0]?.isFinal) {
+        const parsed = parseTaskInput(transcript);
+        if (parsed.type !== 'task') setType(parsed.type);
+        if (parsed.priority !== 'medium') setPriority(parsed.priority);
+        if (parsed.due_date) {
+          const d = new Date(parsed.due_date);
+          setDueDate(d.toISOString().split('T')[0]);
+        }
+        if (parsed.due_time) setDueTime(parsed.due_time);
+      }
     };
 
     recognition.onerror = () => setIsListening(false);
@@ -64,35 +79,40 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
     setIsListening(false);
   };
 
+  // ── Quick date buttons ──
+  const setQuickDate = (label: string) => {
+    const today = new Date();
+    let target: Date;
+    switch (label) {
+      case 'today':
+        target = today;
+        break;
+      case 'tomorrow':
+        target = new Date(today.getTime() + 86400000);
+        break;
+      case 'next_week':
+        target = new Date(today.getTime() + 7 * 86400000);
+        break;
+      default:
+        target = today;
+    }
+    setDueDate(target.toISOString().split('T')[0]);
+  };
+
   // ── Submit ──
   const handleSubmit = () => {
     if (!input.trim()) return;
 
-    if (showDetails) {
-      // Use detailed form fields
-      onSubmit({
-        title: input.trim(),
-        description: description || undefined,
-        type,
-        priority,
-        due_date: dueDate ? new Date(dueDate).toISOString() : undefined,
-        due_time: dueTime || undefined,
-        repeat,
-        contact_id: contactId || undefined,
-      });
-    } else {
-      // Parse natural language
-      const parsed = parseTaskInput(input);
-      onSubmit({
-        title: parsed.title,
-        type: parsed.type,
-        priority: parsed.priority,
-        due_date: parsed.due_date,
-        due_time: parsed.due_time,
-        contact_id: parsed.person ? '__new__' : undefined,
-        context: parsed.person, // Will be used to find/create contact
-      });
-    }
+    onSubmit({
+      title: input.trim(),
+      description: description || undefined,
+      type,
+      priority,
+      due_date: dueDate ? new Date(dueDate + 'T00:00:00').toISOString() : undefined,
+      due_time: dueTime || undefined,
+      repeat,
+      contact_id: contactId || undefined,
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -103,8 +123,17 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
     if (e.key === 'Escape') onClose();
   };
 
-  // Show parsed preview
-  const parsed = input.trim() ? parseTaskInput(input) : null;
+  // Format the selected date for display
+  const formatSelectedDate = () => {
+    if (!dueDate) return 'No date';
+    const d = new Date(dueDate + 'T00:00:00');
+    const today = new Date();
+    const tomorrow = new Date(today.getTime() + 86400000);
+
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+  };
 
   return (
     <>
@@ -129,7 +158,7 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
             <input
               ref={inputRef}
               type="text"
-              placeholder='Try: "Call Amit about pricing tomorrow 11am"'
+              placeholder='What needs to be done?'
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -152,63 +181,89 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
             </button>
           </div>
 
-          {/* Smart parse preview */}
-          {parsed && !showDetails && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              <span className="text-[10px] px-2 py-1 rounded-full font-medium"
-                style={{ background: '#E5F1FF', color: '#007AFF' }}>
-                {parsed.type.replace('_', ' ')}
-              </span>
-              {parsed.due_date && (
-                <span className="text-[10px] px-2 py-1 rounded-full font-medium"
-                  style={{ background: '#EEFBF2', color: '#34C759' }}>
-                  {new Date(parsed.due_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
-                  {parsed.due_time && ` ${parsed.due_time}`}
-                </span>
-              )}
-              {parsed.person && (
-                <span className="text-[10px] px-2 py-1 rounded-full font-medium"
-                  style={{ background: '#F3F0FF', color: '#5856D6' }}>
-                  {parsed.person}
-                </span>
-              )}
-              {parsed.priority !== 'medium' && (
-                <span className="text-[10px] px-2 py-1 rounded-full font-medium"
-                  style={{
-                    background: parsed.priority === 'urgent' ? '#FFF0EF' : '#FFF7ED',
-                    color: parsed.priority === 'urgent' ? '#FF3B30' : '#FF9500',
-                  }}>
-                  {parsed.priority}
-                </span>
-              )}
-            </div>
-          )}
+          {/* ── ALWAYS VISIBLE: Type selector ── */}
+          <div className="flex gap-1.5 mb-3 overflow-x-auto">
+            {([
+              { value: 'task', label: 'Task', icon: '📋' },
+              { value: 'follow_up', label: 'Follow-up', icon: '🔄' },
+              { value: 'reminder', label: 'Reminder', icon: '⏰' },
+              { value: 'habit', label: 'Habit', icon: '🔁' },
+            ] as { value: TaskType; label: string; icon: string }[]).map(t => (
+              <button key={t.value} onClick={() => setType(t.value)}
+                className="text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap flex items-center gap-1"
+                style={{
+                  background: type === t.value ? 'var(--text-primary)' : 'var(--bg-secondary)',
+                  color: type === t.value ? 'var(--bg)' : 'var(--text-secondary)',
+                  border: type === t.value ? 'none' : '1px solid var(--border)',
+                }}>
+                <span className="text-[11px]">{t.icon}</span> {t.label}
+              </button>
+            ))}
+          </div>
 
-          {/* Toggle for detailed mode */}
-          <button onClick={() => setShowDetails(!showDetails)}
+          {/* ── ALWAYS VISIBLE: Date selection ── */}
+          <div className="mb-3">
+            {/* Quick date buttons */}
+            <div className="flex gap-1.5 mb-2">
+              <button onClick={() => setQuickDate('today')}
+                className="text-xs px-3 py-1.5 rounded-full font-medium"
+                style={{
+                  background: formatSelectedDate() === 'Today' ? '#E5F1FF' : 'var(--bg-secondary)',
+                  color: formatSelectedDate() === 'Today' ? '#007AFF' : 'var(--text-secondary)',
+                  border: `1px solid ${formatSelectedDate() === 'Today' ? '#007AFF30' : 'var(--border)'}`,
+                }}>
+                Today
+              </button>
+              <button onClick={() => setQuickDate('tomorrow')}
+                className="text-xs px-3 py-1.5 rounded-full font-medium"
+                style={{
+                  background: formatSelectedDate() === 'Tomorrow' ? '#E5F1FF' : 'var(--bg-secondary)',
+                  color: formatSelectedDate() === 'Tomorrow' ? '#007AFF' : 'var(--text-secondary)',
+                  border: `1px solid ${formatSelectedDate() === 'Tomorrow' ? '#007AFF30' : 'var(--border)'}`,
+                }}>
+                Tomorrow
+              </button>
+              <button onClick={() => setQuickDate('next_week')}
+                className="text-xs px-3 py-1.5 rounded-full font-medium"
+                style={{
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border)',
+                }}>
+                Next week
+              </button>
+              <button onClick={() => setDueDate('')}
+                className="text-xs px-3 py-1.5 rounded-full font-medium"
+                style={{
+                  background: !dueDate ? '#FFF0EF' : 'var(--bg-secondary)',
+                  color: !dueDate ? '#FF3B30' : 'var(--text-tertiary)',
+                  border: `1px solid ${!dueDate ? '#FF3B3030' : 'var(--border)'}`,
+                }}>
+                No date
+              </button>
+            </div>
+            {/* Calendar + time picker */}
+            <div className="flex gap-2">
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                className="flex-1 text-sm px-3 py-2 rounded-lg outline-none"
+                style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
+              <input type="time" value={dueTime} onChange={e => setDueTime(e.target.value)}
+                className="w-28 text-sm px-3 py-2 rounded-lg outline-none"
+                placeholder="Time"
+                style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
+            </div>
+          </div>
+
+          {/* Toggle for extra details */}
+          <button onClick={() => setShowMore(!showMore)}
             className="text-xs font-medium mb-3"
             style={{ color: 'var(--accent)' }}>
-            {showDetails ? 'Use smart input' : 'Add more details'}
+            {showMore ? '− Less options' : '+ Priority, contact, notes'}
           </button>
 
-          {/* Detailed form fields */}
-          {showDetails && (
+          {/* Extra fields (hidden by default) */}
+          {showMore && (
             <div className="space-y-3 mb-4">
-              {/* Type selector */}
-              <div className="flex gap-2">
-                {(['task', 'follow_up', 'reminder', 'habit'] as TaskType[]).map(t => (
-                  <button key={t} onClick={() => setType(t)}
-                    className="text-xs px-3 py-1.5 rounded-full font-medium"
-                    style={{
-                      background: type === t ? 'var(--text-primary)' : 'var(--bg-secondary)',
-                      color: type === t ? 'var(--bg)' : 'var(--text-secondary)',
-                      border: type === t ? 'none' : '1px solid var(--border)',
-                    }}>
-                    {t.replace('_', ' ')}
-                  </button>
-                ))}
-              </div>
-
               {/* Priority */}
               <div className="flex gap-2">
                 {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map(p => (
@@ -224,16 +279,6 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
                 ))}
               </div>
 
-              {/* Date and time */}
-              <div className="flex gap-2">
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                  className="flex-1 text-sm px-3 py-2 rounded-lg outline-none"
-                  style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
-                <input type="time" value={dueTime} onChange={e => setDueTime(e.target.value)}
-                  className="w-28 text-sm px-3 py-2 rounded-lg outline-none"
-                  style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
-              </div>
-
               {/* Repeat */}
               <select value={repeat} onChange={e => setRepeat(e.target.value as RepeatType)}
                 className="w-full text-sm px-3 py-2 rounded-lg outline-none"
@@ -245,14 +290,16 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
               </select>
 
               {/* Contact */}
-              <select value={contactId} onChange={e => setContactId(e.target.value)}
-                className="w-full text-sm px-3 py-2 rounded-lg outline-none"
-                style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
-                <option value="">No contact linked</option>
-                {contacts.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}{c.company ? ` — ${c.company}` : ''}</option>
-                ))}
-              </select>
+              {contacts.length > 0 && (
+                <select value={contactId} onChange={e => setContactId(e.target.value)}
+                  className="w-full text-sm px-3 py-2 rounded-lg outline-none"
+                  style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+                  <option value="">No contact linked</option>
+                  {contacts.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}{c.company ? ` — ${c.company}` : ''}</option>
+                  ))}
+                </select>
+              )}
 
               {/* Description */}
               <textarea value={description} onChange={e => setDescription(e.target.value)}
