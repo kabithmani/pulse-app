@@ -1,38 +1,50 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTasks } from '@/hooks/useTasks';
 import { useContacts } from '@/hooks/useContacts';
-import MorningBriefing from '@/components/MorningBriefing';
+import EABriefing from '@/components/EABriefing';
+import RiskSection from '@/components/RiskSection';
 import TaskCard from '@/components/TaskCard';
 import QuickAdd from '@/components/QuickAdd';
 import PeopleView from '@/components/PeopleView';
-import TaskFilters from '@/components/TaskFilters';
+import { scoreAllTasks, generateEAInsight, ScoredTask } from '@/lib/riskEngine';
 
-type ViewMode = 'today' | 'people';
-type FilterMode = 'all' | 'today' | 'overdue' | 'upcoming' | 'completed';
+type ViewMode = 'ea' | 'all' | 'people';
 
 export default function DashboardPage() {
   const { user, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
-  const [view, setView] = useState<ViewMode>('today');
-  const [filter, setFilter] = useState<FilterMode>('today');
+  const [view, setView] = useState<ViewMode>('ea');
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
   const {
-    tasks, loading: tasksLoading, todayTasks, overdueTasks, upcomingTasks,
-    completedTasks, pendingTasks, createTask, toggleComplete, deleteTask, refetch,
+    tasks, loading: tasksLoading, completedTasks,
+    createTask, toggleComplete, deleteTask,
   } = useTasks(user?.id);
 
-  const { contacts, createContact, findOrCreateByName } = useContacts(user?.id);
+  const { contacts, findOrCreateByName } = useContacts(user?.id);
 
   // Redirect if not logged in
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
   }, [user, authLoading, router]);
+
+  // ── Risk scoring ──
+  const scoredTasks = useMemo(() => scoreAllTasks(tasks), [tasks]);
+  const highRisk = useMemo(() => scoredTasks.filter(t => t.risk === 'high'), [scoredTasks]);
+  const mediumRisk = useMemo(() => scoredTasks.filter(t => t.risk === 'medium'), [scoredTasks]);
+  const safe = useMemo(() => scoredTasks.filter(t => t.risk === 'safe'), [scoredTasks]);
+  const noDate = useMemo(() => scoredTasks.filter(t => t.risk === 'no_date'), [scoredTasks]);
+
+  const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'there';
+  const eaInsight = useMemo(
+    () => generateEAInsight(tasks, displayName),
+    [tasks, displayName]
+  );
 
   if (authLoading || !user) {
     return (
@@ -43,20 +55,6 @@ export default function DashboardPage() {
     );
   }
 
-  // Pick which tasks to show based on filter
-  const getFilteredTasks = () => {
-    switch (filter) {
-      case 'today': return todayTasks;
-      case 'overdue': return overdueTasks;
-      case 'upcoming': return upcomingTasks;
-      case 'completed': return completedTasks;
-      default: return pendingTasks;
-    }
-  };
-
-  const filteredTasks = getFilteredTasks();
-  const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'there';
-
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       {/* ── Header ── */}
@@ -66,26 +64,18 @@ export default function DashboardPage() {
           <div className="flex items-center gap-1">
             {/* View toggles */}
             <div className="flex rounded-lg overflow-hidden" style={{ background: 'var(--bg-tertiary)' }}>
-              <button onClick={() => setView('today')}
-                className="px-3 py-1.5 text-xs font-medium"
-                style={{
-                  background: view === 'today' ? 'var(--bg)' : 'transparent',
-                  color: view === 'today' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  boxShadow: view === 'today' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  borderRadius: '6px', margin: '2px',
-                }}>
-                Today
-              </button>
-              <button onClick={() => setView('people')}
-                className="px-3 py-1.5 text-xs font-medium"
-                style={{
-                  background: view === 'people' ? 'var(--bg)' : 'transparent',
-                  color: view === 'people' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  boxShadow: view === 'people' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  borderRadius: '6px', margin: '2px',
-                }}>
-                People
-              </button>
+              {(['ea', 'all', 'people'] as ViewMode[]).map(v => (
+                <button key={v} onClick={() => setView(v)}
+                  className="px-3 py-1.5 text-xs font-medium"
+                  style={{
+                    background: view === v ? 'var(--bg)' : 'transparent',
+                    color: view === v ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    boxShadow: view === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    borderRadius: '6px', margin: '2px',
+                  }}>
+                  {v === 'ea' ? 'EA' : v === 'all' ? 'All' : 'People'}
+                </button>
+              ))}
             </div>
             {/* Profile menu */}
             <div className="relative ml-2">
@@ -118,59 +108,114 @@ export default function DashboardPage() {
 
       {/* ── Main Content ── */}
       <main className="max-w-2xl mx-auto px-4 pb-24">
-        {view === 'today' ? (
+        {view === 'ea' ? (
           <>
-            {/* Morning briefing */}
-            <MorningBriefing
-              name={displayName}
-              todayCount={todayTasks.length}
-              overdueCount={overdueTasks.length}
-              followUpCount={todayTasks.filter(t => t.type === 'follow_up').length}
-            />
+            {/* EA Briefing */}
+            <EABriefing insight={eaInsight} />
 
-            {/* Filters */}
-            <TaskFilters
-              active={filter}
-              onChange={setFilter}
-              counts={{
-                all: pendingTasks.length,
-                today: todayTasks.length,
-                overdue: overdueTasks.length,
-                upcoming: upcomingTasks.length,
-                completed: completedTasks.length,
-              }}
-            />
+            {/* Loading state */}
+            {tasksLoading ? (
+              <div className="py-12 text-center">
+                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
+                  style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+                <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Analyzing your tasks...</p>
+              </div>
+            ) : scoredTasks.length === 0 ? (
+              <div className="py-16 text-center">
+                <p className="text-4xl mb-3">✨</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  No tasks yet. Tap + to add your first one.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* 🔴 High Risk */}
+                <RiskSection
+                  title="Needs immediate attention"
+                  icon="🔴"
+                  tasks={highRisk}
+                  accentColor="#FF3B30"
+                  onToggle={toggleComplete}
+                  onDelete={deleteTask}
+                />
 
-            {/* Task list */}
-            <div className="mt-4 space-y-2">
-              {tasksLoading ? (
-                <div className="py-12 text-center">
-                  <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
-                    style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-                  <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Loading tasks...</p>
-                </div>
-              ) : filteredTasks.length === 0 ? (
-                <div className="py-16 text-center">
-                  <p className="text-4xl mb-3">{filter === 'completed' ? '🎉' : '✨'}</p>
-                  <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                    {filter === 'completed' ? 'No completed tasks yet' :
-                     filter === 'overdue' ? 'Nothing overdue — you\'re on track!' :
-                     filter === 'today' ? 'No tasks for today' :
-                     'All clear!'}
-                  </p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                    Tap the + button to add something
-                  </p>
-                </div>
-              ) : (
-                filteredTasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onToggle={() => toggleComplete(task.id, task.status)}
-                    onDelete={() => deleteTask(task.id)}
+                {/* 🟠 Today Focus */}
+                <RiskSection
+                  title="Today's focus"
+                  icon="🟠"
+                  tasks={mediumRisk}
+                  accentColor="#FF9500"
+                  onToggle={toggleComplete}
+                  onDelete={deleteTask}
+                />
+
+                {/* ⚪ No date set */}
+                {noDate.length > 0 && (
+                  <RiskSection
+                    title="No due date"
+                    icon="⚪"
+                    tasks={noDate}
+                    accentColor="var(--text-tertiary)"
+                    onToggle={toggleComplete}
+                    onDelete={deleteTask}
                   />
-                ))
+                )}
+
+                {/* 🟢 Safe */}
+                <RiskSection
+                  title="On track"
+                  icon="🟢"
+                  tasks={safe}
+                  accentColor="#34C759"
+                  onToggle={toggleComplete}
+                  onDelete={deleteTask}
+                />
+
+                {/* Completed section (collapsed) */}
+                {completedTasks.length > 0 && (
+                  <details className="mb-6">
+                    <summary className="flex items-center gap-2 px-1 cursor-pointer text-xs font-semibold tracking-wide uppercase"
+                      style={{ color: 'var(--text-tertiary)' }}>
+                      <span>✓</span>
+                      Completed ({completedTasks.length})
+                    </summary>
+                    <div className="mt-3 space-y-2 opacity-60">
+                      {completedTasks.slice(0, 5).map(task => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onToggle={() => toggleComplete(task.id, task.status)}
+                          onDelete={() => deleteTask(task.id)}
+                        />
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </>
+            )}
+          </>
+        ) : view === 'all' ? (
+          <>
+            {/* Simple flat list of all pending tasks */}
+            <div className="mt-6 mb-4">
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                All pending tasks ({scoredTasks.length})
+              </h2>
+            </div>
+            <div className="space-y-2">
+              {scoredTasks.map(task => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onToggle={() => toggleComplete(task.id, task.status)}
+                  onDelete={() => deleteTask(task.id)}
+                />
+              ))}
+              {scoredTasks.length === 0 && (
+                <div className="py-16 text-center">
+                  <p className="text-4xl mb-3">✨</p>
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>All clear!</p>
+                </div>
               )}
             </div>
           </>
@@ -193,7 +238,6 @@ export default function DashboardPage() {
           contacts={contacts}
           onClose={() => setShowQuickAdd(false)}
           onSubmit={async (formData) => {
-            // If a person was detected, find or create contact
             if (formData.contact_id === '__new__' && formData.context) {
               const contact = await findOrCreateByName(formData.context);
               if (contact) formData.contact_id = contact.id;
