@@ -1,7 +1,7 @@
 'use client';
 
 import { ScoredTask } from '@/lib/riskEngine';
-import TaskCard from './TaskCard';
+import TaskCard from '@/components/TaskCard';
 
 interface RiskSectionProps {
   title: string;
