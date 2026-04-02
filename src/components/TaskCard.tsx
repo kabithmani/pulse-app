@@ -25,19 +25,16 @@ const priorityConfig = {
   urgent: { label: 'Urgent', color: '#FF3B30' },
 };
 
-const SWIPE_THRESHOLD = 72; // px needed to trigger action
+const SWIPE_THRESHOLD = 72;
 
 export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCardProps) {
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-
-  // ── Swipe state ──
   const [swipeX, setSwipeX] = useState(0);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const isSwiping = useRef(false);
 
-  // Edit form state
   const [editTitle, setEditTitle] = useState(task.title);
   const [editType, setEditType] = useState<TaskType>(task.type);
   const [editPriority, setEditPriority] = useState<TaskPriority>(task.priority);
@@ -58,7 +55,6 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
     return format(date, 'MMM d') + (task.due_time ? ` ${task.due_time}` : '');
   };
 
-  // ── Swipe handlers ──
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
@@ -68,35 +64,26 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
   const handleTouchMove = (e: React.TouchEvent) => {
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
-
-    // Only hijack horizontal swipes — let vertical scrolling through
     if (!isSwiping.current && Math.abs(dy) > Math.abs(dx)) return;
     if (Math.abs(dx) > 8) isSwiping.current = true;
     if (!isSwiping.current) return;
-
-    // Clamp: right max +100, left max -100
     const clamped = Math.max(-100, Math.min(100, dx));
     setSwipeX(clamped);
   };
 
   const handleTouchEnd = () => {
-    if (swipeX > SWIPE_THRESHOLD) {
-      onToggle(); // swipe right = complete
-    } else if (swipeX < -SWIPE_THRESHOLD) {
-      onDelete(); // swipe left = delete
-    }
+    if (swipeX > SWIPE_THRESHOLD) onToggle();
+    else if (swipeX < -SWIPE_THRESHOLD) onDelete();
     setSwipeX(0);
     isSwiping.current = false;
   };
 
-  // Background colour behind the card during swipe
   const swipeBg = swipeX > 0
     ? `rgba(52, 199, 89, ${Math.min(swipeX / SWIPE_THRESHOLD, 1) * 0.15})`
     : `rgba(255, 59, 48, ${Math.min(-swipeX / SWIPE_THRESHOLD, 1) * 0.15})`;
 
   const swipeIconOpacity = Math.min(Math.abs(swipeX) / SWIPE_THRESHOLD, 1);
 
-  // ── Edit handlers ──
   const handleEditOpen = (e: React.MouseEvent) => {
     e.stopPropagation();
     setEditTitle(task.title);
@@ -126,7 +113,6 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
     setIsEditing(false);
   };
 
-  // ── EDIT MODE ──
   if (isEditing) {
     return (
       <div
@@ -140,13 +126,8 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
           onChange={e => setEditTitle(e.target.value)}
           autoFocus
           className="w-full text-sm font-medium bg-transparent outline-none mb-3"
-          style={{
-            color: 'var(--text-primary)',
-            borderBottom: '1px solid var(--border)',
-            paddingBottom: '8px',
-          }}
+          style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}
         />
-
         <div className="flex gap-1.5 mb-3 overflow-x-auto">
           {([
             { value: 'task', label: 'Task' },
@@ -154,8 +135,7 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
             { value: 'reminder', label: 'Reminder' },
             { value: 'habit', label: 'Habit' },
           ] as { value: TaskType; label: string }[]).map(t => (
-            <button
-              key={t.value}
+            <button key={t.value}
               onClick={e => { e.stopPropagation(); setEditType(t.value); }}
               className="text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap"
               style={{
@@ -167,11 +147,9 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
             </button>
           ))}
         </div>
-
         <div className="flex gap-1.5 mb-3">
           {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map(p => (
-            <button
-              key={p}
+            <button key={p}
               onClick={e => { e.stopPropagation(); setEditPriority(p); }}
               className="text-xs px-3 py-1.5 rounded-full font-medium capitalize"
               style={{
@@ -183,35 +161,27 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
             </button>
           ))}
         </div>
-
         <div className="flex gap-2 mb-4">
-          <input
-            type="date"
-            value={editDate}
+          <input type="date" value={editDate}
             onChange={e => setEditDate(e.target.value)}
             onClick={e => e.stopPropagation()}
             className="flex-1 text-sm px-3 py-2 rounded-lg outline-none"
             style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
           />
-          <input
-            type="time"
-            value={editTime}
+          <input type="time" value={editTime}
             onChange={e => setEditTime(e.target.value)}
             onClick={e => e.stopPropagation()}
             className="w-28 text-sm px-3 py-2 rounded-lg outline-none"
             style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
           />
         </div>
-
         <div className="flex gap-2">
-          <button
-            onClick={handleEditSave}
+          <button onClick={handleEditSave}
             className="flex-1 py-2 rounded-lg text-sm font-semibold text-white"
             style={{ background: 'var(--accent)' }}>
             Save
           </button>
-          <button
-            onClick={handleEditCancel}
+          <button onClick={handleEditCancel}
             className="px-4 py-2 rounded-lg text-sm font-medium"
             style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
             Cancel
@@ -221,19 +191,12 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
     );
   }
 
-  // ── NORMAL MODE ──
   return (
-    <div
-      className="relative rounded-xl overflow-hidden"
-      style={{ background: swipeBg }}
-    >
-      {/* Swipe hint icons revealed behind card */}
+    <div className="relative rounded-xl overflow-hidden" style={{ background: swipeBg }}>
       <div className="absolute inset-0 flex items-center justify-between px-5 pointer-events-none">
         <span style={{ fontSize: 20, opacity: swipeX > 0 ? swipeIconOpacity : 0 }}>✓</span>
         <span style={{ fontSize: 20, opacity: swipeX < 0 ? swipeIconOpacity : 0 }}>🗑</span>
       </div>
-
-      {/* Card itself slides */}
       <div
         className="group rounded-xl p-4 relative"
         style={{
@@ -244,13 +207,12 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
           transition: swipeX === 0 ? 'transform 0.3s ease' : 'none',
           touchAction: 'pan-y',
         }}
-        onClick={() => !isSwiping.current && setShowActions(!showActions)}
+        onClick={() => { if (!isSwiping.current) setShowActions(!showActions); }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         <div className="flex gap-3">
-          {/* Checkbox */}
           <button
             onClick={(e) => { e.stopPropagation(); onToggle(); }}
             className="mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0"
@@ -264,8 +226,6 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
               </svg>
             )}
           </button>
-
-          {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 mb-1.5">
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
@@ -279,21 +239,15 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
                 </span>
               )}
             </div>
-
             <p className="text-sm font-medium leading-snug"
-              style={{
-                color: 'var(--text-primary)',
-                textDecoration: isCompleted ? 'line-through' : 'none',
-              }}>
+              style={{ color: 'var(--text-primary)', textDecoration: isCompleted ? 'line-through' : 'none' }}>
               {task.title}
             </p>
-
             {task.description && (
               <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                 {task.description}
               </p>
             )}
-
             <div className="flex items-center gap-3 mt-2">
               {task.contact && (
                 <div className="flex items-center gap-1.5">
@@ -315,18 +269,26 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
             </div>
           </div>
         </div>
-
-        {/* Action buttons */}
         {showActions && (
           <div className="flex justify-end gap-2 mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
-            <button
-              onClick={handleEditOpen}
+            <button onClick={handleEditOpen}
               className="text-xs px-3 py-1.5 rounded-lg font-medium"
               style={{ background: '#E5F1FF', color: '#007AFF' }}>
               Edit
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onToggle(); setShowActions(false); }}
+            <button onClick={(e) => { e.stopPropagation(); onToggle(); setShowActions(false); }}
               className="text-xs px-3 py-1.5 rounded-lg font-medium"
               style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-              {isCompleted ? 'Reo
+              {isCompleted ? 'Reopen' : 'Complete'}
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowActions(false); }}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium"
+              style={{ background: '#FFF0EF', color: 'var(--danger)' }}>
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
