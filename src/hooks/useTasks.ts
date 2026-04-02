@@ -8,12 +8,15 @@ import { startOfDay, endOfDay, isBefore, isToday, isAfter } from 'date-fns';
 export function useTasks(userId?: string) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch all tasks for the user
+  const clearError = useCallback(() => setError(null), []);
+
   const fetchTasks = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
-    
+    setError(null);
+
     const { data, error } = await supabase
       .from('tasks')
       .select('*, contact:contacts(*)')
@@ -21,17 +24,16 @@ export function useTasks(userId?: string) {
       .order('due_date', { ascending: true, nullsFirst: false });
 
     if (error) {
-      console.error('Error fetching tasks:', error);
+      setError('Could not load tasks. Check your connection and try again.');
     } else {
       setTasks(data || []);
     }
     setLoading(false);
   }, [userId]);
 
-  // Subscribe to real-time changes (cross-device sync)
   useEffect(() => {
     if (!userId) return;
-    
+
     fetchTasks();
 
     const channel = supabase
@@ -46,10 +48,10 @@ export function useTasks(userId?: string) {
     return () => { supabase.removeChannel(channel); };
   }, [userId, fetchTasks]);
 
-  // Create a new task
   const createTask = useCallback(async (formData: TaskFormData) => {
     if (!userId) return null;
-    
+    setError(null);
+
     const { data, error } = await supabase
       .from('tasks')
       .insert({ ...formData, user_id: userId, status: 'pending' })
@@ -57,14 +59,15 @@ export function useTasks(userId?: string) {
       .single();
 
     if (error) {
-      console.error('Error creating task:', error);
+      setError('Could not save task. Please try again.');
       return null;
     }
     return data;
   }, [userId]);
 
-  // Update a task
   const updateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
+    setError(null);
+
     const { data, error } = await supabase
       .from('tasks')
       .update(updates)
@@ -73,11 +76,10 @@ export function useTasks(userId?: string) {
       .single();
 
     if (error) {
-      console.error('Error updating task:', error);
+      setError('Could not update task. Please try again.');
       return null;
     }
 
-    // Update contact's last interaction when a task is completed
     if (updates.status === 'completed') {
       const task = tasks.find(t => t.id === taskId);
       if (task && task.contact_id) {
@@ -91,43 +93,39 @@ export function useTasks(userId?: string) {
     return data;
   }, [tasks]);
 
-  // Toggle task completion
   const toggleComplete = useCallback(async (taskId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
-    return updateTask(taskId, { 
-      status: newStatus, 
-      completed_at: newStatus === 'completed' ? new Date().toISOString() : undefined 
+    return updateTask(taskId, {
+      status: newStatus,
+      completed_at: newStatus === 'completed' ? new Date().toISOString() : undefined,
     });
   }, [updateTask]);
 
-  // Delete a task
   const deleteTask = useCallback(async (taskId: string) => {
+    setError(null);
     const { error } = await supabase.from('tasks').delete().eq('id', taskId);
-    if (error) console.error('Error deleting task:', error);
+    if (error) setError('Could not delete task. Please try again.');
   }, []);
 
-  // ── Filtered views ──
   const now = new Date();
 
-  const todayTasks = tasks.filter(t => 
+  const todayTasks = tasks.filter(t =>
     t.status !== 'completed' && t.due_date && isToday(new Date(t.due_date))
   );
-
-  const overdueTasks = tasks.filter(t => 
+  const overdueTasks = tasks.filter(t =>
     t.status !== 'completed' && t.due_date && isBefore(new Date(t.due_date), startOfDay(now)) && !isToday(new Date(t.due_date))
   );
-
-  const upcomingTasks = tasks.filter(t => 
+  const upcomingTasks = tasks.filter(t =>
     t.status !== 'completed' && t.due_date && isAfter(new Date(t.due_date), endOfDay(now))
   );
-
   const completedTasks = tasks.filter(t => t.status === 'completed');
-
   const pendingTasks = tasks.filter(t => t.status !== 'completed');
 
   return {
     tasks,
     loading,
+    error,
+    clearError,
     todayTasks,
     overdueTasks,
     upcomingTasks,
