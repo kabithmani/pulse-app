@@ -2,6 +2,7 @@
 
 import { ScoredTask } from '@/lib/riskEngine';
 import TaskCard from '@/components/TaskCard';
+import { Task } from '@/lib/types';
 
 interface RiskSectionProps {
   title: string;
@@ -11,13 +12,11 @@ interface RiskSectionProps {
   emptyMessage?: string;
   onToggle: (id: string, status: string) => void;
   onDelete: (id: string) => void;
+  onUpdate: (id: string, updates: Partial<Task>) => void;
 }
 
-export default function RiskSection({ title, icon, tasks, accentColor, emptyMessage, onToggle, onDelete }: RiskSectionProps) {
-  if (tasks.length === 0 && emptyMessage) {
-    return null; // Hide empty sections unless it's the main one
-  }
-
+export default function RiskSection({ title, icon, tasks, accentColor, emptyMessage, onToggle, onDelete, onUpdate }: RiskSectionProps) {
+  if (tasks.length === 0 && emptyMessage) return null;
   if (tasks.length === 0) return null;
 
   return (
@@ -49,6 +48,7 @@ export default function RiskSection({ title, icon, tasks, accentColor, emptyMess
               task={task}
               onToggle={() => onToggle(task.id, task.status)}
               onDelete={() => onDelete(task.id)}
+              onUpdate={(updates: Partial<Task>) => onUpdate(task.id, updates)}
             />
           </div>
         ))}
