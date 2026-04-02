@@ -46,38 +46,24 @@ body {
   min-height: 100dvh;
 }
 
-/* Smooth transitions everywhere */
 * {
   transition-property: background-color, border-color, color, opacity, transform;
   transition-duration: 150ms;
   transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-/* Remove transition from scroll and layout */
 input, textarea, select, button {
   transition-property: background-color, border-color, color, opacity, transform, box-shadow;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--text-tertiary);
-  border-radius: 3px;
-}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-tertiary); border-radius: 3px; }
 
-/* Safe area padding for mobile notch/home indicator */
 @supports (padding: env(safe-area-inset-bottom)) {
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 }
 
-/* Glass morphism card */
 .glass-card {
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(20px) saturate(180%);
@@ -92,7 +78,34 @@ input, textarea, select, button {
   }
 }
 
-/* Pulse animation for recording indicator */
+/* ── Skeleton shimmer ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 25%,
+    var(--bg-secondary) 50%,
+    var(--bg-tertiary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* ── Offline banner ── */
+@keyframes slide-down-banner {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.offline-banner {
+  animation: slide-down-banner 0.3s ease;
+}
+
+/* ── Pulse recording ring ── */
 @keyframes pulse-ring {
   0% { transform: scale(1); opacity: 1; }
   100% { transform: scale(1.5); opacity: 0; }
@@ -102,7 +115,7 @@ input, textarea, select, button {
   animation: pulse-ring 1.2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
 }
 
-/* Slide-up animation for modals/sheets */
+/* ── Slide-up for modals ── */
 @keyframes slide-up {
   from { transform: translateY(100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
@@ -112,7 +125,7 @@ input, textarea, select, button {
   animation: slide-up 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-/* Slide-down animation for alert toasts */
+/* ── Slide-down for toasts ── */
 @keyframes slide-down {
   from { transform: translateY(-20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
