@@ -294,7 +294,12 @@ export default function DashboardPage() {
           </>
 
         ) : (
-          <PeopleView contacts={contacts} tasks={tasks} />
+          <PeopleView
+  contacts={contacts}
+  tasks={tasks}
+  onUpdateTask={updateTask}
+  onCreateTask={createTask}
+/>
         )}
       </main>
 
