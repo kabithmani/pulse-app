@@ -76,8 +76,20 @@ export function useTasks(userId?: string) {
       console.error('Error updating task:', error);
       return null;
     }
+
+    // Update contact's last interaction when a task is completed
+    if (updates.status === 'completed') {
+      const task = tasks.find(t => t.id === taskId);
+      if (task && task.contact_id) {
+        await supabase
+          .from('contacts')
+          .update({ last_interaction_date: new Date().toISOString() })
+          .eq('id', task.contact_id);
+      }
+    }
+
     return data;
-  }, []);
+  }, [tasks]);
 
   // Toggle task completion
   const toggleComplete = useCallback(async (taskId: string, currentStatus: string) => {
