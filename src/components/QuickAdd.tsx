@@ -16,6 +16,8 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
   const [showMore, setShowMore] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestTranscriptRef = useRef('');
 
   // Form state — date and type are always visible now
   const [type, setType] = useState<TaskType>('task');
@@ -42,7 +44,7 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-IN';
 
@@ -52,11 +54,16 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
       const transcript = Array.from(event.results)
         .map((result: any) => result[0].transcript)
         .join('');
-      setInput(transcript);
 
-      // Auto-detect and fill fields from voice input
-      if (event.results[0]?.isFinal) {
-        const parsed = parseTaskInput(transcript);
+      setInput(transcript);
+      latestTranscriptRef.current = transcript;
+
+      // Reset silence timer every time new words arrive
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = setTimeout(() => {
+        // 2 seconds of silence = done speaking
+        recognition.stop();
+        const parsed = parseTaskInput(latestTranscriptRef.current);
         if (parsed.type !== 'task') setType(parsed.type);
         if (parsed.priority !== 'medium') setPriority(parsed.priority);
         if (parsed.due_date) {
@@ -64,17 +71,25 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
           setDueDate(d.toISOString().split('T')[0]);
         }
         if (parsed.due_time) setDueTime(parsed.due_time);
-      }
+      }, 2000);
     };
 
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      setIsListening(false);
+    };
 
     recognitionRef.current = recognition;
     recognition.start();
   };
 
   const stopListening = () => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     recognitionRef.current?.stop();
     setIsListening(false);
   };
