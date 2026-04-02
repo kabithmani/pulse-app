@@ -29,12 +29,12 @@ export default function DashboardPage() {
   const {
     tasks, loading: tasksLoading, completedTasks,
     createTask, toggleComplete, deleteTask, updateTask,
+    error: taskError, clearError,
   } = useTasks(user?.id);
 
   const { contacts, findOrCreateByName } = useContacts(user?.id);
   const { alerts, dismissAlert, dismissAll } = useTaskAlerts(tasks);
 
-  // ── Online / offline detection ──
   useEffect(() => {
     setIsOnline(navigator.onLine);
     const handleOnline = () => setIsOnline(true);
@@ -80,6 +80,15 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
 
+      {/* ── Error Banner ── */}
+      {taskError && (
+        <div className="sticky top-0 z-50 px-4 py-2.5 flex items-center justify-between text-xs font-medium text-white"
+          style={{ background: '#FF3B30' }}>
+          <span>⚠ {taskError}</span>
+          <button onClick={clearError} className="ml-3 opacity-80 hover:opacity-100">✕</button>
+        </div>
+      )}
+
       {/* ── Offline Banner ── */}
       {!isOnline && (
         <div className="offline-banner sticky top-0 z-50 px-4 py-2.5 text-center text-xs font-medium text-white"
@@ -96,6 +105,8 @@ export default function DashboardPage() {
             Pulse
           </h1>
           <div className="flex items-center gap-1">
+
+            {/* View toggles */}
             <div className="flex rounded-lg overflow-hidden" style={{ background: 'var(--bg-tertiary)' }}>
               {(['ea', 'all', 'people'] as ViewMode[]).map(v => (
                 <button key={v} onClick={() => setView(v)}
@@ -110,7 +121,16 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
-            <div className="relative ml-2">
+
+            {/* Reports button */}
+            <button onClick={() => router.push('/reports')}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-sm ml-1"
+              style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+              📊
+            </button>
+
+            {/* Profile menu */}
+            <div className="relative ml-1">
               <button onClick={() => setShowMenu(!showMenu)}
                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white"
                 style={{ background: 'var(--accent)' }}>
@@ -151,12 +171,10 @@ export default function DashboardPage() {
             <EABriefing insight={eaInsight} />
 
             {tasksLoading ? (
-              // ── Skeleton loading ──
               <div className="space-y-2">
                 {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
               </div>
             ) : scoredTasks.length === 0 ? (
-              // ── Empty state ──
               <div className="py-16 text-center px-6">
                 <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4"
                   style={{ background: 'var(--bg-secondary)' }}>
@@ -243,7 +261,6 @@ export default function DashboardPage() {
                 {scoredTasks.length}
               </span>
             </div>
-
             {tasksLoading ? (
               <div className="space-y-2">
                 {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
