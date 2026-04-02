@@ -12,7 +12,7 @@ import QuickAdd from '@/components/QuickAdd';
 import PeopleView from '@/components/PeopleView';
 import { scoreAllTasks, generateEAInsight, ScoredTask } from '@/lib/riskEngine';
 import { useTaskAlerts, requestNotificationPermission } from '@/hooks/useTaskAlerts';
-import AlertToast from '@/components/AlertToast';
+import AlertToast from '@/hooks/AlertToast';
 
 type ViewMode = 'ea' | 'all' | 'people';
 
