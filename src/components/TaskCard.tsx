@@ -1,6 +1,6 @@
 'use client';
 
-import { Task } from '@/lib/types';
+import { Task, TaskType, TaskPriority } from '@/lib/types';
 import { format, isPast, isToday } from 'date-fns';
 import { useState } from 'react';
 
@@ -8,6 +8,7 @@ interface TaskCardProps {
   task: Task;
   onToggle: () => void;
   onDelete: () => void;
+  onUpdate: (updates: Partial<Task>) => void;
 }
 
 const typeConfig = {
@@ -24,8 +25,19 @@ const priorityConfig = {
   urgent: { label: 'Urgent', color: '#FF3B30' },
 };
 
-export default function TaskCard({ task, onToggle, onDelete }: TaskCardProps) {
+export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCardProps) {
   const [showActions, setShowActions] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Edit form state
+  const [editTitle, setEditTitle] = useState(task.title);
+  const [editType, setEditType] = useState<TaskType>(task.type);
+  const [editPriority, setEditPriority] = useState<TaskPriority>(task.priority);
+  const [editDate, setEditDate] = useState(
+    task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''
+  );
+  const [editTime, setEditTime] = useState(task.due_time || '');
+
   const isCompleted = task.status === 'completed';
   const isOverdue = task.due_date && isPast(new Date(task.due_date)) && !isToday(new Date(task.due_date)) && !isCompleted;
   const type = typeConfig[task.type];
@@ -38,6 +50,136 @@ export default function TaskCard({ task, onToggle, onDelete }: TaskCardProps) {
     return format(date, 'MMM d') + (task.due_time ? ` ${task.due_time}` : '');
   };
 
+  const handleEditOpen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditTitle(task.title);
+    setEditType(task.type);
+    setEditPriority(task.priority);
+    setEditDate(task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : '');
+    setEditTime(task.due_time || '');
+    setIsEditing(true);
+    setShowActions(false);
+  };
+
+  const handleEditSave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!editTitle.trim()) return;
+    onUpdate({
+      title: editTitle.trim(),
+      type: editType,
+      priority: editPriority,
+      due_date: editDate ? new Date(editDate + 'T00:00:00').toISOString() : undefined,
+      due_time: editTime || undefined,
+    });
+    setIsEditing(false);
+  };
+
+  const handleEditCancel = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditing(false);
+  };
+
+  // ── EDIT MODE ──
+  if (isEditing) {
+    return (
+      <div
+        className="rounded-xl p-4"
+        style={{ background: 'var(--bg)', border: '1px solid var(--accent)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Title input */}
+        <input
+          type="text"
+          value={editTitle}
+          onChange={e => setEditTitle(e.target.value)}
+          autoFocus
+          className="w-full text-sm font-medium bg-transparent outline-none mb-3"
+          style={{
+            color: 'var(--text-primary)',
+            borderBottom: '1px solid var(--border)',
+            paddingBottom: '8px',
+          }}
+        />
+
+        {/* Type selector */}
+        <div className="flex gap-1.5 mb-3 overflow-x-auto">
+          {([
+            { value: 'task', label: 'Task' },
+            { value: 'follow_up', label: 'Follow-up' },
+            { value: 'reminder', label: 'Reminder' },
+            { value: 'habit', label: 'Habit' },
+          ] as { value: TaskType; label: string }[]).map(t => (
+            <button
+              key={t.value}
+              onClick={e => { e.stopPropagation(); setEditType(t.value); }}
+              className="text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap"
+              style={{
+                background: editType === t.value ? 'var(--text-primary)' : 'var(--bg-secondary)',
+                color: editType === t.value ? 'var(--bg)' : 'var(--text-secondary)',
+                border: editType === t.value ? 'none' : '1px solid var(--border)',
+              }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Priority selector */}
+        <div className="flex gap-1.5 mb-3">
+          {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map(p => (
+            <button
+              key={p}
+              onClick={e => { e.stopPropagation(); setEditPriority(p); }}
+              className="text-xs px-3 py-1.5 rounded-full font-medium capitalize"
+              style={{
+                background: editPriority === p ? 'var(--text-primary)' : 'var(--bg-secondary)',
+                color: editPriority === p ? 'var(--bg)' : 'var(--text-secondary)',
+                border: editPriority === p ? 'none' : '1px solid var(--border)',
+              }}>
+              {p}
+            </button>
+          ))}
+        </div>
+
+        {/* Date + Time */}
+        <div className="flex gap-2 mb-4">
+          <input
+            type="date"
+            value={editDate}
+            onChange={e => setEditDate(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            className="flex-1 text-sm px-3 py-2 rounded-lg outline-none"
+            style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+          />
+          <input
+            type="time"
+            value={editTime}
+            onChange={e => setEditTime(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            className="w-28 text-sm px-3 py-2 rounded-lg outline-none"
+            style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+          />
+        </div>
+
+        {/* Save / Cancel */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleEditSave}
+            className="flex-1 py-2 rounded-lg text-sm font-semibold text-white"
+            style={{ background: 'var(--accent)' }}>
+            Save
+          </button>
+          <button
+            onClick={handleEditCancel}
+            className="px-4 py-2 rounded-lg text-sm font-medium"
+            style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── NORMAL MODE ──
   return (
     <div
       className="group rounded-xl p-4 relative"
@@ -119,15 +261,23 @@ export default function TaskCard({ task, onToggle, onDelete }: TaskCardProps) {
         </div>
       </div>
 
-      {/* Action buttons (shown on click/tap) */}
+      {/* Action buttons */}
       {showActions && (
         <div className="flex justify-end gap-2 mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
-          <button onClick={(e) => { e.stopPropagation(); onToggle(); setShowActions(false); }}
+          <button
+            onClick={handleEditOpen}
+            className="text-xs px-3 py-1.5 rounded-lg font-medium"
+            style={{ background: '#E5F1FF', color: '#007AFF' }}>
+            Edit
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggle(); setShowActions(false); }}
             className="text-xs px-3 py-1.5 rounded-lg font-medium"
             style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
             {isCompleted ? 'Reopen' : 'Complete'}
           </button>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowActions(false); }}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); setShowActions(false); }}
             className="text-xs px-3 py-1.5 rounded-lg font-medium"
             style={{ background: '#FFF0EF', color: 'var(--danger)' }}>
             Delete
