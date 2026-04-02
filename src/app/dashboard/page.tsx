@@ -8,9 +8,10 @@ import { useContacts } from '@/hooks/useContacts';
 import EABriefing from '@/lib/EABriefing';
 import RiskSection from '@/lib/RiskSection';
 import TaskCard from '@/components/TaskCard';
+import SkeletonCard from '@/components/SkeletonCard';
 import QuickAdd from '@/components/QuickAdd';
 import PeopleView from '@/components/PeopleView';
-import { scoreAllTasks, generateEAInsight, ScoredTask } from '@/lib/riskEngine';
+import { scoreAllTasks, generateEAInsight } from '@/lib/riskEngine';
 import { useTaskAlerts, requestNotificationPermission } from '@/hooks/useTaskAlerts';
 import AlertToast from '@/hooks/AlertToast';
 import { Task } from '@/lib/types';
@@ -23,6 +24,7 @@ export default function DashboardPage() {
   const [view, setView] = useState<ViewMode>('ea');
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
 
   const {
     tasks, loading: tasksLoading, completedTasks,
@@ -30,21 +32,27 @@ export default function DashboardPage() {
   } = useTasks(user?.id);
 
   const { contacts, findOrCreateByName } = useContacts(user?.id);
-
-  // ── Notification alerts ──
   const { alerts, dismissAlert, dismissAll } = useTaskAlerts(tasks);
 
-  // Request notification permission on first load
+  // ── Online / offline detection ──
   useEffect(() => {
-    requestNotificationPermission();
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
-  // Redirect if not logged in
+  useEffect(() => { requestNotificationPermission(); }, []);
+
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
   }, [user, authLoading, router]);
 
-  // ── Risk scoring ──
   const scoredTasks = useMemo(() => scoreAllTasks(tasks), [tasks]);
   const highRisk = useMemo(() => scoredTasks.filter(t => t.risk === 'high'), [scoredTasks]);
   const mediumRisk = useMemo(() => scoredTasks.filter(t => t.risk === 'medium'), [scoredTasks]);
@@ -60,20 +68,34 @@ export default function DashboardPage() {
   if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-          style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+        <div className="text-center">
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white text-lg font-bold mx-auto mb-3"
+            style={{ background: 'var(--accent)' }}>P</div>
+          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Loading Pulse...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+
+      {/* ── Offline Banner ── */}
+      {!isOnline && (
+        <div className="offline-banner sticky top-0 z-50 px-4 py-2.5 text-center text-xs font-medium text-white"
+          style={{ background: '#636366' }}>
+          📡 You're offline — showing cached tasks. Changes will sync when you reconnect.
+        </div>
+      )}
+
       {/* ── Header ── */}
-      <header className="sticky top-0 z-30 safe-top" style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
+      <header className="sticky top-0 z-30 safe-top"
+        style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>Pulse</h1>
+          <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+            Pulse
+          </h1>
           <div className="flex items-center gap-1">
-            {/* View toggles */}
             <div className="flex rounded-lg overflow-hidden" style={{ background: 'var(--bg-tertiary)' }}>
               {(['ea', 'all', 'people'] as ViewMode[]).map(v => (
                 <button key={v} onClick={() => setView(v)}
@@ -88,7 +110,6 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
-            {/* Profile menu */}
             <div className="relative ml-2">
               <button onClick={() => setShowMenu(!showMenu)}
                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white"
@@ -101,7 +122,9 @@ export default function DashboardPage() {
                   <div className="absolute right-0 top-10 z-50 w-48 rounded-xl py-1 shadow-lg"
                     style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                     <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{displayName}</p>
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {displayName}
+                      </p>
                       <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{user.email}</p>
                     </div>
                     <button onClick={() => { signOut(); setShowMenu(false); }}
@@ -122,28 +145,32 @@ export default function DashboardPage() {
 
       {/* ── Main Content ── */}
       <main className="max-w-2xl mx-auto px-4 pb-24">
+
         {view === 'ea' ? (
           <>
-            {/* EA Briefing */}
             <EABriefing insight={eaInsight} />
 
-            {/* Loading state */}
             {tasksLoading ? (
-              <div className="py-12 text-center">
-                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
-                  style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-                <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Analyzing your tasks...</p>
+              // ── Skeleton loading ──
+              <div className="space-y-2">
+                {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
               </div>
             ) : scoredTasks.length === 0 ? (
-              <div className="py-16 text-center">
-                <p className="text-4xl mb-3">✨</p>
-                <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                  No tasks yet. Tap + to add your first one.
+              // ── Empty state ──
+              <div className="py-16 text-center px-6">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4"
+                  style={{ background: 'var(--bg-secondary)' }}>
+                  ✨
+                </div>
+                <p className="text-base font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+                  You're all clear
+                </p>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Tap the + button to add your first task, follow-up, or reminder.
                 </p>
               </div>
             ) : (
               <>
-                {/* 🔴 High Risk */}
                 <RiskSection
                   title="Needs immediate attention"
                   icon="🔴"
@@ -153,8 +180,6 @@ export default function DashboardPage() {
                   onDelete={deleteTask}
                   onUpdate={updateTask}
                 />
-
-                {/* 🟠 Today Focus */}
                 <RiskSection
                   title="Today's focus"
                   icon="🟠"
@@ -164,8 +189,6 @@ export default function DashboardPage() {
                   onDelete={deleteTask}
                   onUpdate={updateTask}
                 />
-
-                {/* ⚪ No date set */}
                 {noDate.length > 0 && (
                   <RiskSection
                     title="No due date"
@@ -177,8 +200,6 @@ export default function DashboardPage() {
                     onUpdate={updateTask}
                   />
                 )}
-
-                {/* 🟢 Safe */}
                 <RiskSection
                   title="On track"
                   icon="🟢"
@@ -188,14 +209,11 @@ export default function DashboardPage() {
                   onDelete={deleteTask}
                   onUpdate={updateTask}
                 />
-
-                {/* Completed section */}
                 {completedTasks.length > 0 && (
                   <details className="mb-6">
                     <summary className="flex items-center gap-2 px-1 cursor-pointer text-xs font-semibold tracking-wide uppercase"
                       style={{ color: 'var(--text-tertiary)' }}>
-                      <span>✓</span>
-                      Completed ({completedTasks.length})
+                      <span>✓</span> Completed ({completedTasks.length})
                     </summary>
                     <div className="mt-3 space-y-2 opacity-60">
                       {completedTasks.slice(0, 5).map(task => (
@@ -213,31 +231,51 @@ export default function DashboardPage() {
               </>
             )}
           </>
+
         ) : view === 'all' ? (
           <>
-            <div className="mt-6 mb-4">
+            <div className="mt-6 mb-4 flex items-center justify-between">
               <h2 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                All pending tasks ({scoredTasks.length})
+                All pending tasks
               </h2>
+              <span className="text-xs px-2 py-0.5 rounded-full"
+                style={{ background: 'var(--bg-secondary)', color: 'var(--text-tertiary)' }}>
+                {scoredTasks.length}
+              </span>
             </div>
-            <div className="space-y-2">
-              {scoredTasks.map(task => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onToggle={() => toggleComplete(task.id, task.status)}
-                  onDelete={() => deleteTask(task.id)}
-                  onUpdate={(updates: Partial<Task>) => updateTask(task.id, updates)}
-                />
-              ))}
-              {scoredTasks.length === 0 && (
-                <div className="py-16 text-center">
-                  <p className="text-4xl mb-3">✨</p>
-                  <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>All clear!</p>
+
+            {tasksLoading ? (
+              <div className="space-y-2">
+                {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : scoredTasks.length === 0 ? (
+              <div className="py-16 text-center px-6">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4"
+                  style={{ background: 'var(--bg-secondary)' }}>
+                  📋
                 </div>
-              )}
-            </div>
+                <p className="text-base font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+                  No tasks yet
+                </p>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Tap + to add your first one. Try saying it with your voice.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {scoredTasks.map(task => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onToggle={() => toggleComplete(task.id, task.status)}
+                    onDelete={() => deleteTask(task.id)}
+                    onUpdate={(updates: Partial<Task>) => updateTask(task.id, updates)}
+                  />
+                ))}
+              </div>
+            )}
           </>
+
         ) : (
           <PeopleView contacts={contacts} tasks={tasks} />
         )}
