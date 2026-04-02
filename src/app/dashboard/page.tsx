@@ -11,6 +11,8 @@ import TaskCard from '@/components/TaskCard';
 import QuickAdd from '@/components/QuickAdd';
 import PeopleView from '@/components/PeopleView';
 import { scoreAllTasks, generateEAInsight, ScoredTask } from '@/lib/riskEngine';
+import { useTaskAlerts, requestNotificationPermission } from '@/hooks/useTaskAlerts';
+import AlertToast from '@/components/AlertToast';
 
 type ViewMode = 'ea' | 'all' | 'people';
 
@@ -27,6 +29,14 @@ export default function DashboardPage() {
   } = useTasks(user?.id);
 
   const { contacts, findOrCreateByName } = useContacts(user?.id);
+
+  // ── Notification alerts ──
+  const { alerts, dismissAlert, dismissAll } = useTaskAlerts(tasks);
+
+  // Request notification permission on first load
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -105,6 +115,9 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* ── Alert Toasts ── */}
+      <AlertToast alerts={alerts} onDismiss={dismissAlert} onDismissAll={dismissAll} />
 
       {/* ── Main Content ── */}
       <main className="max-w-2xl mx-auto px-4 pb-24">
