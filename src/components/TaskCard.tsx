@@ -2,7 +2,7 @@
 
 import { Task, TaskType, TaskPriority } from '@/lib/types';
 import { format, isPast, isToday } from 'date-fns';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface TaskCardProps {
   task: Task;
@@ -25,9 +25,17 @@ const priorityConfig = {
   urgent: { label: 'Urgent', color: '#FF3B30' },
 };
 
+const SWIPE_THRESHOLD = 72; // px needed to trigger action
+
 export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCardProps) {
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  // ── Swipe state ──
+  const [swipeX, setSwipeX] = useState(0);
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const isSwiping = useRef(false);
 
   // Edit form state
   const [editTitle, setEditTitle] = useState(task.title);
@@ -50,6 +58,45 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
     return format(date, 'MMM d') + (task.due_time ? ` ${task.due_time}` : '');
   };
 
+  // ── Swipe handlers ──
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isSwiping.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+
+    // Only hijack horizontal swipes — let vertical scrolling through
+    if (!isSwiping.current && Math.abs(dy) > Math.abs(dx)) return;
+    if (Math.abs(dx) > 8) isSwiping.current = true;
+    if (!isSwiping.current) return;
+
+    // Clamp: right max +100, left max -100
+    const clamped = Math.max(-100, Math.min(100, dx));
+    setSwipeX(clamped);
+  };
+
+  const handleTouchEnd = () => {
+    if (swipeX > SWIPE_THRESHOLD) {
+      onToggle(); // swipe right = complete
+    } else if (swipeX < -SWIPE_THRESHOLD) {
+      onDelete(); // swipe left = delete
+    }
+    setSwipeX(0);
+    isSwiping.current = false;
+  };
+
+  // Background colour behind the card during swipe
+  const swipeBg = swipeX > 0
+    ? `rgba(52, 199, 89, ${Math.min(swipeX / SWIPE_THRESHOLD, 1) * 0.15})`
+    : `rgba(255, 59, 48, ${Math.min(-swipeX / SWIPE_THRESHOLD, 1) * 0.15})`;
+
+  const swipeIconOpacity = Math.min(Math.abs(swipeX) / SWIPE_THRESHOLD, 1);
+
+  // ── Edit handlers ──
   const handleEditOpen = (e: React.MouseEvent) => {
     e.stopPropagation();
     setEditTitle(task.title);
@@ -87,7 +134,6 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
         style={{ background: 'var(--bg)', border: '1px solid var(--accent)' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Title input */}
         <input
           type="text"
           value={editTitle}
@@ -101,7 +147,6 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
           }}
         />
 
-        {/* Type selector */}
         <div className="flex gap-1.5 mb-3 overflow-x-auto">
           {([
             { value: 'task', label: 'Task' },
@@ -123,7 +168,6 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
           ))}
         </div>
 
-        {/* Priority selector */}
         <div className="flex gap-1.5 mb-3">
           {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map(p => (
             <button
@@ -140,7 +184,6 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
           ))}
         </div>
 
-        {/* Date + Time */}
         <div className="flex gap-2 mb-4">
           <input
             type="date"
@@ -160,7 +203,6 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
           />
         </div>
 
-        {/* Save / Cancel */}
         <div className="flex gap-2">
           <button
             onClick={handleEditSave}
@@ -182,108 +224,109 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
   // ── NORMAL MODE ──
   return (
     <div
-      className="group rounded-xl p-4 relative"
-      style={{
-        background: 'var(--bg)',
-        border: `1px solid ${isOverdue ? 'rgba(255,59,48,0.2)' : 'var(--border)'}`,
-        opacity: isCompleted ? 0.55 : 1,
-      }}
-      onClick={() => setShowActions(!showActions)}
+      className="relative rounded-xl overflow-hidden"
+      style={{ background: swipeBg }}
     >
-      <div className="flex gap-3">
-        {/* Checkbox */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onToggle(); }}
-          className="mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0"
-          style={{
-            borderColor: isCompleted ? 'var(--success)' : isOverdue ? 'var(--danger)' : 'var(--border)',
-            background: isCompleted ? 'var(--success)' : 'transparent',
-          }}>
-          {isCompleted && (
-            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-              <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          )}
-        </button>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {/* Type + Priority badges */}
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-              style={{ background: type.bg, color: type.color }}>
-              {type.label}
-            </span>
-            {(task.priority === 'high' || task.priority === 'urgent') && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                style={{ background: task.priority === 'urgent' ? '#FFF0EF' : '#FFF7ED', color: priority.color }}>
-                {priority.label}
-              </span>
-            )}
-          </div>
-
-          {/* Title */}
-          <p className="text-sm font-medium leading-snug"
-            style={{
-              color: 'var(--text-primary)',
-              textDecoration: isCompleted ? 'line-through' : 'none',
-            }}>
-            {task.title}
-          </p>
-
-          {/* Description */}
-          {task.description && (
-            <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              {task.description}
-            </p>
-          )}
-
-          {/* Footer: contact + date */}
-          <div className="flex items-center gap-3 mt-2">
-            {task.contact && (
-              <div className="flex items-center gap-1.5">
-                <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
-                  style={{ background: '#5856D6' }}>
-                  {task.contact.name[0]}
-                </div>
-                <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-                  {task.contact.name}
-                </span>
-              </div>
-            )}
-            {task.due_date && (
-              <span className="text-[11px]"
-                style={{ color: isOverdue ? 'var(--danger)' : 'var(--text-tertiary)' }}>
-                {formatDueDate()}
-              </span>
-            )}
-          </div>
-        </div>
+      {/* Swipe hint icons revealed behind card */}
+      <div className="absolute inset-0 flex items-center justify-between px-5 pointer-events-none">
+        <span style={{ fontSize: 20, opacity: swipeX > 0 ? swipeIconOpacity : 0 }}>✓</span>
+        <span style={{ fontSize: 20, opacity: swipeX < 0 ? swipeIconOpacity : 0 }}>🗑</span>
       </div>
 
-      {/* Action buttons */}
-      {showActions && (
-        <div className="flex justify-end gap-2 mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+      {/* Card itself slides */}
+      <div
+        className="group rounded-xl p-4 relative"
+        style={{
+          background: 'var(--bg)',
+          border: `1px solid ${isOverdue ? 'rgba(255,59,48,0.2)' : 'var(--border)'}`,
+          opacity: isCompleted ? 0.55 : 1,
+          transform: `translateX(${swipeX}px)`,
+          transition: swipeX === 0 ? 'transform 0.3s ease' : 'none',
+          touchAction: 'pan-y',
+        }}
+        onClick={() => !isSwiping.current && setShowActions(!showActions)}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="flex gap-3">
+          {/* Checkbox */}
           <button
-            onClick={handleEditOpen}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium"
-            style={{ background: '#E5F1FF', color: '#007AFF' }}>
-            Edit
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            className="mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0"
+            style={{
+              borderColor: isCompleted ? 'var(--success)' : isOverdue ? 'var(--danger)' : 'var(--border)',
+              background: isCompleted ? 'var(--success)' : 'transparent',
+            }}>
+            {isCompleted && (
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
           </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onToggle(); setShowActions(false); }}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium"
-            style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-            {isCompleted ? 'Reopen' : 'Complete'}
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(); setShowActions(false); }}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium"
-            style={{ background: '#FFF0EF', color: 'var(--danger)' }}>
-            Delete
-          </button>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: type.bg, color: type.color }}>
+                {type.label}
+              </span>
+              {(task.priority === 'high' || task.priority === 'urgent') && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: task.priority === 'urgent' ? '#FFF0EF' : '#FFF7ED', color: priority.color }}>
+                  {priority.label}
+                </span>
+              )}
+            </div>
+
+            <p className="text-sm font-medium leading-snug"
+              style={{
+                color: 'var(--text-primary)',
+                textDecoration: isCompleted ? 'line-through' : 'none',
+              }}>
+              {task.title}
+            </p>
+
+            {task.description && (
+              <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                {task.description}
+              </p>
+            )}
+
+            <div className="flex items-center gap-3 mt-2">
+              {task.contact && (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
+                    style={{ background: '#5856D6' }}>
+                    {task.contact.name[0]}
+                  </div>
+                  <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                    {task.contact.name}
+                  </span>
+                </div>
+              )}
+              {task.due_date && (
+                <span className="text-[11px]"
+                  style={{ color: isOverdue ? 'var(--danger)' : 'var(--text-tertiary)' }}>
+                  {formatDueDate()}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-      )}
-    </div>
-  );
-}
+
+        {/* Action buttons */}
+        {showActions && (
+          <div className="flex justify-end gap-2 mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+            <button
+              onClick={handleEditOpen}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium"
+              style={{ background: '#E5F1FF', color: '#007AFF' }}>
+              Edit
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggle(); setShowActions(false); }}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium"
+              style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+              {isCompleted ? 'Reo
