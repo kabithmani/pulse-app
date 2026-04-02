@@ -13,6 +13,7 @@ import PeopleView from '@/components/PeopleView';
 import { scoreAllTasks, generateEAInsight, ScoredTask } from '@/lib/riskEngine';
 import { useTaskAlerts, requestNotificationPermission } from '@/hooks/useTaskAlerts';
 import AlertToast from '@/hooks/AlertToast';
+import { Task } from '@/lib/types';
 
 type ViewMode = 'ea' | 'all' | 'people';
 
@@ -25,7 +26,7 @@ export default function DashboardPage() {
 
   const {
     tasks, loading: tasksLoading, completedTasks,
-    createTask, toggleComplete, deleteTask,
+    createTask, toggleComplete, deleteTask, updateTask,
   } = useTasks(user?.id);
 
   const { contacts, findOrCreateByName } = useContacts(user?.id);
@@ -150,6 +151,7 @@ export default function DashboardPage() {
                   accentColor="#FF3B30"
                   onToggle={toggleComplete}
                   onDelete={deleteTask}
+                  onUpdate={updateTask}
                 />
 
                 {/* 🟠 Today Focus */}
@@ -160,6 +162,7 @@ export default function DashboardPage() {
                   accentColor="#FF9500"
                   onToggle={toggleComplete}
                   onDelete={deleteTask}
+                  onUpdate={updateTask}
                 />
 
                 {/* ⚪ No date set */}
@@ -171,6 +174,7 @@ export default function DashboardPage() {
                     accentColor="var(--text-tertiary)"
                     onToggle={toggleComplete}
                     onDelete={deleteTask}
+                    onUpdate={updateTask}
                   />
                 )}
 
@@ -182,9 +186,10 @@ export default function DashboardPage() {
                   accentColor="#34C759"
                   onToggle={toggleComplete}
                   onDelete={deleteTask}
+                  onUpdate={updateTask}
                 />
 
-                {/* Completed section (collapsed) */}
+                {/* Completed section */}
                 {completedTasks.length > 0 && (
                   <details className="mb-6">
                     <summary className="flex items-center gap-2 px-1 cursor-pointer text-xs font-semibold tracking-wide uppercase"
@@ -199,6 +204,7 @@ export default function DashboardPage() {
                           task={task}
                           onToggle={() => toggleComplete(task.id, task.status)}
                           onDelete={() => deleteTask(task.id)}
+                          onUpdate={(updates: Partial<Task>) => updateTask(task.id, updates)}
                         />
                       ))}
                     </div>
@@ -209,7 +215,6 @@ export default function DashboardPage() {
           </>
         ) : view === 'all' ? (
           <>
-            {/* Simple flat list of all pending tasks */}
             <div className="mt-6 mb-4">
               <h2 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
                 All pending tasks ({scoredTasks.length})
@@ -222,6 +227,7 @@ export default function DashboardPage() {
                   task={task}
                   onToggle={() => toggleComplete(task.id, task.status)}
                   onDelete={() => deleteTask(task.id)}
+                  onUpdate={(updates: Partial<Task>) => updateTask(task.id, updates)}
                 />
               ))}
               {scoredTasks.length === 0 && (
