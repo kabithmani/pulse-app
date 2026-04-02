@@ -98,6 +98,18 @@ export function generateEAInsight(tasks: Task[], userName: string): EAInsight {
   const noDate = scored.filter(t => t.risk === 'no_date');
   const followUps = scored.filter(t => t.type === 'follow_up' && t.risk !== 'safe');
 
+  // Detect stale follow-ups (overdue follow-ups with contacts)
+  const now = new Date();
+  const staleFollowUps = tasks
+    .filter(t => t.type === 'follow_up' && t.status !== 'completed' && t.due_date && t.contact)
+    .map(t => {
+      const due = new Date(t.due_date!);
+      const daysOverdue = Math.floor((now.getTime() - due.getTime()) / 86400000);
+      return { task: t, daysOverdue, contactName: t.contact!.name };
+    })
+    .filter(t => t.daysOverdue >= 3)
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const icon = hour < 12 ? '☀️' : hour < 17 ? '🌤️' : '🌙';
@@ -132,6 +144,14 @@ export function generateEAInsight(tasks: Task[], userName: string): EAInsight {
     const personNote = topItem.contact ? ` with ${topItem.contact.name}` : '';
     details.push(`Most urgent: "${topItem.title}"${personNote} — ${topItem.riskReason.toLowerCase()}.`);
 
+    // Add stale follow-up nudges
+    if (staleFollowUps.length > 0) {
+      const nudge = staleFollowUps.slice(0, 2).map(f => 
+        `${f.contactName} (${f.daysOverdue} days)`
+      ).join(', ');
+      details.push(`You haven't followed up with ${nudge}.`);
+    }
+
     return {
       greeting,
       icon,
@@ -159,6 +179,14 @@ export function generateEAInsight(tasks: Task[], userName: string): EAInsight {
       details.push(`${noDate.length} task${noDate.length !== 1 ? 's have' : ' has'} no due date — consider setting one.`);
     }
 
+    // Add stale follow-up nudges
+    if (staleFollowUps.length > 0) {
+      const nudge = staleFollowUps.slice(0, 2).map(f => 
+        `${f.contactName} (${f.daysOverdue} days)`
+      ).join(', ');
+      details.push(`Stale follow-up: you haven't contacted ${nudge}.`);
+    }
+
     return {
       greeting,
       icon,
@@ -171,6 +199,14 @@ export function generateEAInsight(tasks: Task[], userName: string): EAInsight {
   // CALM mood
   if (noDate.length > 0) {
     details.push(`${noDate.length} task${noDate.length !== 1 ? 's have' : ' has'} no due date.`);
+  }
+
+  // Even in calm mood, mention stale follow-ups
+  if (staleFollowUps.length > 0) {
+    const nudge = staleFollowUps.slice(0, 2).map(f => 
+      `${f.contactName} (${f.daysOverdue} days ago)`
+    ).join(', ');
+    details.push(`Don't forget: follow up with ${nudge}.`);
   }
   details.push(`${scored.filter(t => t.risk === 'safe').length} task${scored.filter(t => t.risk === 'safe').length !== 1 ? 's' : ''} on track — nothing urgent.`);
 
