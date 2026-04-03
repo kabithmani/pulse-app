@@ -22,7 +22,6 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (event.request.url.includes('supabase.co')) return;
-
   event.respondWith(
     fetch(event.request)
       .then((response) => {
@@ -30,7 +29,11 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
       })
-    self.addEventListener('push', (event) => {
+      .catch(() => caches.match(event.request))
+  );
+});
+
+self.addEventListener('push', (event) => {
   if (!event.data) return;
   const data = event.data.json();
   event.waitUntil(
@@ -46,7 +49,4 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(clients.openWindow('/dashboard'));
-});
-      .catch(() => caches.match(event.request))
-  );
 });
