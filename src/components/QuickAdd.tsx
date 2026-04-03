@@ -19,23 +19,21 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestTranscriptRef = useRef('');
 
-  // Form state — date and type are always visible now
   const [type, setType] = useState<TaskType>('task');
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [dueDate, setDueDate] = useState('');
   const [dueTime, setDueTime] = useState('');
   const [repeat, setRepeat] = useState<RepeatType>('none');
+  const [recurrenceDays, setRecurrenceDays] = useState<number | undefined>(undefined);
   const [contactId, setContactId] = useState('');
   const [description, setDescription] = useState('');
 
-  // Set today as default date
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
     setDueDate(today);
     inputRef.current?.focus();
   }, []);
 
-  // ── Voice Input ──
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -58,10 +56,8 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
       setInput(transcript);
       latestTranscriptRef.current = transcript;
 
-      // Reset silence timer every time new words arrive
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = setTimeout(() => {
-        // 2 seconds of silence = done speaking
         recognition.stop();
         const parsed = parseTaskInput(latestTranscriptRef.current);
         if (parsed.type !== 'task') setType(parsed.type);
@@ -94,30 +90,20 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
     setIsListening(false);
   };
 
-  // ── Quick date buttons ──
   const setQuickDate = (label: string) => {
     const today = new Date();
     let target: Date;
     switch (label) {
-      case 'today':
-        target = today;
-        break;
-      case 'tomorrow':
-        target = new Date(today.getTime() + 86400000);
-        break;
-      case 'next_week':
-        target = new Date(today.getTime() + 7 * 86400000);
-        break;
-      default:
-        target = today;
+      case 'today': target = today; break;
+      case 'tomorrow': target = new Date(today.getTime() + 86400000); break;
+      case 'next_week': target = new Date(today.getTime() + 7 * 86400000); break;
+      default: target = today;
     }
     setDueDate(target.toISOString().split('T')[0]);
   };
 
-  // ── Submit ──
   const handleSubmit = () => {
     if (!input.trim()) return;
-
     onSubmit({
       title: input.trim(),
       description: description || undefined,
@@ -126,54 +112,65 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
       due_date: dueDate ? new Date(dueDate + 'T00:00:00').toISOString() : undefined,
       due_time: dueTime || undefined,
       repeat,
+      recurrence_days: recurrenceDays,
       contact_id: contactId || undefined,
     });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
     if (e.key === 'Escape') onClose();
   };
 
-  // Format the selected date for display
   const formatSelectedDate = () => {
     if (!dueDate) return 'No date';
     const d = new Date(dueDate + 'T00:00:00');
     const today = new Date();
     const tomorrow = new Date(today.getTime() + 86400000);
-
     if (d.toDateString() === today.toDateString()) return 'Today';
     if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
     return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   };
 
+  const recurrenceLabel = () => {
+    if (!recurrenceDays) return null;
+    const options: Record<number, string> = {
+      3: 'every 3 days', 7: 'every week',
+      14: 'every 2 weeks', 30: 'every month',
+      60: 'every 2 months', 90: 'every 3 months',
+    };
+    return options[recurrenceDays] || `every ${recurrenceDays} days`;
+  };
+
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.3)' }} onClick={onClose} />
 
-      {/* Modal */}
       <div className="fixed inset-x-0 bottom-0 z-50 animate-slide-up safe-bottom"
         style={{ background: 'var(--bg)', borderRadius: '20px 20px 0 0', boxShadow: '0 -8px 40px rgba(0,0,0,0.12)' }}>
         <div className="p-5 max-w-2xl mx-auto">
-          {/* Header */}
+
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>New task</h2>
+            <div>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>New task</h2>
+              {recurrenceDays && (
+                <p className="text-xs mt-0.5" style={{ color: 'var(--accent)' }}>
+                  🔁 Repeats {recurrenceLabel()} after completion
+                </p>
+              )}
+            </div>
             <button onClick={onClose} className="text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>
               Cancel
             </button>
           </div>
 
-          {/* Main input with mic */}
+          {/* Main input */}
           <div className="flex items-center gap-2 rounded-xl px-4 py-3 mb-3"
             style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
             <input
               ref={inputRef}
               type="text"
-              placeholder='What needs to be done?'
+              placeholder="What needs to be done?"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -196,7 +193,7 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
             </button>
           </div>
 
-          {/* ── ALWAYS VISIBLE: Type selector ── */}
+          {/* Type selector */}
           <div className="flex gap-1.5 mb-3 overflow-x-auto">
             {([
               { value: 'task', label: 'Task', icon: '📋' },
@@ -216,37 +213,27 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
             ))}
           </div>
 
-          {/* ── ALWAYS VISIBLE: Date selection ── */}
+          {/* Date selection */}
           <div className="mb-3">
-            {/* Quick date buttons */}
             <div className="flex gap-1.5 mb-2">
-              <button onClick={() => setQuickDate('today')}
-                className="text-xs px-3 py-1.5 rounded-full font-medium"
-                style={{
-                  background: formatSelectedDate() === 'Today' ? '#E5F1FF' : 'var(--bg-secondary)',
-                  color: formatSelectedDate() === 'Today' ? '#007AFF' : 'var(--text-secondary)',
-                  border: `1px solid ${formatSelectedDate() === 'Today' ? '#007AFF30' : 'var(--border)'}`,
-                }}>
-                Today
-              </button>
-              <button onClick={() => setQuickDate('tomorrow')}
-                className="text-xs px-3 py-1.5 rounded-full font-medium"
-                style={{
-                  background: formatSelectedDate() === 'Tomorrow' ? '#E5F1FF' : 'var(--bg-secondary)',
-                  color: formatSelectedDate() === 'Tomorrow' ? '#007AFF' : 'var(--text-secondary)',
-                  border: `1px solid ${formatSelectedDate() === 'Tomorrow' ? '#007AFF30' : 'var(--border)'}`,
-                }}>
-                Tomorrow
-              </button>
-              <button onClick={() => setQuickDate('next_week')}
-                className="text-xs px-3 py-1.5 rounded-full font-medium"
-                style={{
-                  background: 'var(--bg-secondary)',
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border)',
-                }}>
-                Next week
-              </button>
+              {['today', 'tomorrow', 'next_week'].map(label => (
+                <button key={label} onClick={() => setQuickDate(label)}
+                  className="text-xs px-3 py-1.5 rounded-full font-medium capitalize"
+                  style={{
+                    background: formatSelectedDate().toLowerCase() === label.replace('_', ' ') || 
+                      (label === 'today' && formatSelectedDate() === 'Today') ||
+                      (label === 'tomorrow' && formatSelectedDate() === 'Tomorrow')
+                      ? '#E5F1FF' : 'var(--bg-secondary)',
+                    color: (label === 'today' && formatSelectedDate() === 'Today') ||
+                      (label === 'tomorrow' && formatSelectedDate() === 'Tomorrow')
+                      ? '#007AFF' : 'var(--text-secondary)',
+                    border: `1px solid ${(label === 'today' && formatSelectedDate() === 'Today') ||
+                      (label === 'tomorrow' && formatSelectedDate() === 'Tomorrow')
+                      ? '#007AFF30' : 'var(--border)'}`,
+                  }}>
+                  {label === 'next_week' ? 'Next week' : label.charAt(0).toUpperCase() + label.slice(1)}
+                </button>
+              ))}
               <button onClick={() => setDueDate('')}
                 className="text-xs px-3 py-1.5 rounded-full font-medium"
                 style={{
@@ -257,26 +244,22 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
                 No date
               </button>
             </div>
-            {/* Calendar + time picker */}
             <div className="flex gap-2">
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
                 className="flex-1 text-sm px-3 py-2 rounded-lg outline-none"
                 style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
               <input type="time" value={dueTime} onChange={e => setDueTime(e.target.value)}
                 className="w-28 text-sm px-3 py-2 rounded-lg outline-none"
-                placeholder="Time"
                 style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
             </div>
           </div>
 
-          {/* Toggle for extra details */}
           <button onClick={() => setShowMore(!showMore)}
             className="text-xs font-medium mb-3"
             style={{ color: 'var(--accent)' }}>
-            {showMore ? '− Less options' : '+ Priority, contact, notes'}
+            {showMore ? '− Less options' : '+ Priority, repeat, contact, notes'}
           </button>
 
-          {/* Extra fields (hidden by default) */}
           {showMore && (
             <div className="space-y-3 mb-4">
               {/* Priority */}
@@ -294,15 +277,30 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
                 ))}
               </div>
 
-              {/* Repeat */}
-              <select value={repeat} onChange={e => setRepeat(e.target.value as RepeatType)}
-                className="w-full text-sm px-3 py-2 rounded-lg outline-none"
-                style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
-                <option value="none">No repeat</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
+              {/* Recurring follow-up */}
+              <div>
+                <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  🔁 Auto-repeat after completion
+                </label>
+                <select
+                  value={recurrenceDays ?? ''}
+                  onChange={e => setRecurrenceDays(e.target.value ? Number(e.target.value) : undefined)}
+                  className="w-full text-sm px-3 py-2 rounded-lg outline-none"
+                  style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: `1px solid ${recurrenceDays ? 'var(--accent)' : 'var(--border)'}` }}>
+                  <option value="">Never — complete once and done</option>
+                  <option value="3">Every 3 days</option>
+                  <option value="7">Every week</option>
+                  <option value="14">Every 2 weeks</option>
+                  <option value="30">Every month</option>
+                  <option value="60">Every 2 months</option>
+                  <option value="90">Every 3 months</option>
+                </select>
+                {recurrenceDays && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                    When you complete this, a new one appears {recurrenceLabel()} later automatically.
+                  </p>
+                )}
+              </div>
 
               {/* Contact */}
               {contacts.length > 0 && (
@@ -316,7 +314,7 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
                 </select>
               )}
 
-              {/* Description */}
+              {/* Notes */}
               <textarea value={description} onChange={e => setDescription(e.target.value)}
                 placeholder="Add notes or context..."
                 rows={2}
@@ -325,7 +323,6 @@ export default function QuickAdd({ contacts, onClose, onSubmit }: QuickAddProps)
             </div>
           )}
 
-          {/* Submit */}
           <button onClick={handleSubmit}
             disabled={!input.trim()}
             className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
