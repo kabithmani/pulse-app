@@ -14,12 +14,12 @@ export interface Task {
   due_date?: string;
   due_time?: string;
   repeat: RepeatType;
+  recurrence_days?: number;
   contact_id?: string;
   context?: string;
   completed_at?: string;
   created_at: string;
   updated_at: string;
-  // Joined data
   contact?: Contact;
 }
 
@@ -61,11 +61,11 @@ export interface TaskFormData {
   due_date?: string;
   due_time?: string;
   repeat: RepeatType;
+  recurrence_days?: number;
   contact_id?: string;
   context?: string;
 }
 
-// For the voice/NLP parser
 export interface ParsedInput {
   title: string;
   type: TaskType;
