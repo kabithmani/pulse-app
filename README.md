@@ -1,5 +1,6 @@
 # Pulse — Setup Guide
 
+
 This guide will get your app live on the internet in about 30 minutes.
 No coding knowledge needed. Just follow each step exactly.
 
