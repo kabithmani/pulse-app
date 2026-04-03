@@ -137,11 +137,35 @@ export function useTasks(userId?: string) {
       source: 'manual',
     });
 
-    return updateTask(taskId, {
+    const result = await updateTask(taskId, {
       status: newStatus,
       completed_at: newStatus === 'completed' ? new Date().toISOString() : undefined,
     });
-  }, [updateTask, userId, logEvent]);
+
+    // Auto-recreate recurring tasks when completed
+    if (newStatus === 'completed') {
+      const task = tasks.find(t => t.id === taskId);
+      if (task && task.recurrence_days) {
+        const nextDue = new Date();
+        nextDue.setDate(nextDue.getDate() + task.recurrence_days);
+
+        await createTask({
+          title: task.title,
+          description: task.description,
+          type: task.type,
+          priority: task.priority,
+          due_date: nextDue.toISOString(),
+          due_time: task.due_time,
+          repeat: task.repeat,
+          recurrence_days: task.recurrence_days,
+          contact_id: task.contact_id,
+          context: task.context,
+        });
+      }
+    }
+
+    return result;
+  }, [updateTask, userId, logEvent, tasks, createTask]);
 
   const deleteTask = useCallback(async (taskId: string) => {
     setError(null);
