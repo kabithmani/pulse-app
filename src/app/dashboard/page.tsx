@@ -17,6 +17,7 @@ import AlertToast from '@/hooks/AlertToast';
 import { Task } from '@/lib/types';
 import { useSubscription } from '@/hooks/useSubscription';
 import SubscriptionBanner from '@/components/SubscriptionBanner';
+import InstallPrompt from '@/components/InstallPrompt';
 
 type ViewMode = 'ea' | 'all' | 'people';
 
@@ -180,6 +181,18 @@ export default function DashboardPage() {
                       style={{ color: 'var(--text-primary)' }}>
                       🔗 Webhook / Zapier
                     </button>
+                    <button onClick={async () => {
+                      const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
+                      const res = await fetch('/api/webhook/keygen', { headers: { Authorization: `Bearer ${session?.access_token}` } });
+                      const json = await res.json();
+                      const key = json.key;
+                      if (key) window.open(`/api/calendar/ics?key=${key}`, '_blank');
+                      setShowMenu(false);
+                    }}
+                      className="w-full text-left px-3 py-2 text-sm"
+                      style={{ color: 'var(--text-primary)' }}>
+                      📅 Sync to Google Calendar
+                    </button>
                     <button onClick={() => { signOut(); setShowMenu(false); }}
                       className="w-full text-left px-3 py-2 text-sm"
                       style={{ color: 'var(--danger)' }}>
@@ -195,6 +208,7 @@ export default function DashboardPage() {
 
       {/* ── Alert Toasts ── */}
       <AlertToast alerts={alerts} onDismiss={dismissAlert} onDismissAll={dismissAll} />
+      <InstallPrompt />
 
       {/* ── Main Content ── */}
       <main className="max-w-2xl mx-auto px-4 pb-24">
