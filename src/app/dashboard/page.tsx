@@ -19,12 +19,12 @@ import { useSubscription } from '@/hooks/useSubscription';
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import InstallPrompt from '@/components/InstallPrompt';
 
-type ViewMode = 'ea' | 'all' | 'people';
+type ViewMode = 'tasks' | 'people';
 
 export default function DashboardPage() {
   const { user, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
-  const [view, setView] = useState<ViewMode>('ea');
+  const [view, setView] = useState<ViewMode>('tasks');
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showWebhook, setShowWebhook] = useState(false);
@@ -129,70 +129,55 @@ export default function DashboardPage() {
       {/* ── Header ── */}
       <header className="sticky top-0 z-30 safe-top"
         style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+
+        {/* Row 1: Logo + action icons */}
+        <div className="max-w-2xl mx-auto px-4 pt-3 pb-2 flex items-center justify-between">
           <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
             Pulse
           </h1>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
 
-            {/* View toggles */}
-            <div className="flex rounded-lg overflow-hidden" style={{ background: 'var(--bg-tertiary)' }}>
-              {(['ea', 'all', 'people'] as ViewMode[]).map(v => (
-                <button key={v} onClick={() => setView(v)}
-                  className="px-3 py-1.5 text-xs font-medium"
-                  style={{
-                    background: view === v ? 'var(--bg)' : 'transparent',
-                    color: view === v ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    boxShadow: view === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                    borderRadius: '6px', margin: '2px',
-                  }}>
-                  {v === 'ea' ? 'EA' : v === 'all' ? 'All' : 'People'}
-                </button>
-              ))}
-            </div>
-
-            {/* Reports button */}
-            <button onClick={() => router.push('/reports')}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-sm ml-1"
+            {/* Webhook button */}
+            <button
+              onClick={() => { setShowWebhook(true); fetchWebhookKey(); }}
+              title="Webhook / Zapier integration"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium"
               style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-              📊
+              🔗 <span className="hidden sm:inline">Webhook</span>
             </button>
 
-            {/* Profile menu */}
-            <div className="relative ml-1">
+            {/* Calendar sync button */}
+            <button
+              onClick={async () => {
+                const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
+                const res = await fetch('/api/webhook/keygen', { headers: { Authorization: `Bearer ${session?.access_token}` } });
+                const json = await res.json();
+                const key = json.key;
+                if (key) window.open(`/api/calendar/ics?key=${key}`, '_blank');
+              }}
+              title="Subscribe your tasks to any calendar (Google, Outlook, Apple)"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium"
+              style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+              📅 <span className="hidden sm:inline">Calendar</span>
+            </button>
+
+            {/* Avatar + sign out */}
+            <div className="relative">
               <button onClick={() => setShowMenu(!showMenu)}
                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white"
+                title={user.email ?? ''}
                 style={{ background: 'var(--accent)' }}>
                 {displayName[0].toUpperCase()}
               </button>
               {showMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                  <div className="absolute right-0 top-10 z-50 w-48 rounded-xl py-1 shadow-lg"
+                  <div className="absolute right-0 top-10 z-50 w-52 rounded-xl py-1 shadow-lg"
                     style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                     <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                        {displayName}
-                      </p>
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{displayName}</p>
                       <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{user.email}</p>
                     </div>
-                    <button onClick={() => { setShowWebhook(true); setShowMenu(false); fetchWebhookKey(); }}
-                      className="w-full text-left px-3 py-2 text-sm"
-                      style={{ color: 'var(--text-primary)' }}>
-                      🔗 Webhook / Zapier
-                    </button>
-                    <button onClick={async () => {
-                      const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
-                      const res = await fetch('/api/webhook/keygen', { headers: { Authorization: `Bearer ${session?.access_token}` } });
-                      const json = await res.json();
-                      const key = json.key;
-                      if (key) window.open(`/api/calendar/ics?key=${key}`, '_blank');
-                      setShowMenu(false);
-                    }}
-                      className="w-full text-left px-3 py-2 text-sm"
-                      style={{ color: 'var(--text-primary)' }}>
-                      📅 Sync to Google Calendar
-                    </button>
                     <button onClick={() => { signOut(); setShowMenu(false); }}
                       className="w-full text-left px-3 py-2 text-sm"
                       style={{ color: 'var(--danger)' }}>
@@ -204,6 +189,27 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Row 2: Main nav tabs */}
+        <div className="max-w-2xl mx-auto px-4 pb-0 flex gap-0" style={{ borderTop: '1px solid var(--border)' }}>
+          {([
+            { key: 'tasks',   label: '✓  Tasks',   desc: 'Your smart task view' },
+            { key: 'people',  label: '👤  People',  desc: 'Contacts & follow-ups' },
+            { key: 'reports', label: '📊  Reports', desc: 'Insights & analytics' },
+          ] as { key: string; label: string; desc: string }[]).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => key === 'reports' ? router.push('/reports') : setView(key as ViewMode)}
+              className="flex-1 py-2.5 text-xs font-semibold text-center relative"
+              style={{
+                color: view === key ? 'var(--accent)' : 'var(--text-secondary)',
+                borderBottom: view === key ? '2px solid var(--accent)' : '2px solid transparent',
+                background: 'transparent',
+              }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </header>
 
       {/* ── Alert Toasts ── */}
@@ -213,7 +219,7 @@ export default function DashboardPage() {
       {/* ── Main Content ── */}
       <main className="max-w-2xl mx-auto px-4 pb-24">
 
-        {view === 'ea' ? (
+        {view === 'tasks' ? (
           <>
             <EABriefing insight={eaInsight} />
 
@@ -294,49 +300,6 @@ export default function DashboardPage() {
                   </details>
                 )}
               </>
-            )}
-          </>
-
-        ) : view === 'all' ? (
-          <>
-            <div className="mt-6 mb-4 flex items-center justify-between">
-              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                All pending tasks
-              </h2>
-              <span className="text-xs px-2 py-0.5 rounded-full"
-                style={{ background: 'var(--bg-secondary)', color: 'var(--text-tertiary)' }}>
-                {scoredTasks.length}
-              </span>
-            </div>
-            {tasksLoading ? (
-              <div className="space-y-2">
-                {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
-              </div>
-            ) : scoredTasks.length === 0 ? (
-              <div className="py-16 text-center px-6">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4"
-                  style={{ background: 'var(--bg-secondary)' }}>
-                  📋
-                </div>
-                <p className="text-base font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
-                  No tasks yet
-                </p>
-                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  Tap + to add your first one. Try saying it with your voice.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {scoredTasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onToggle={() => toggleComplete(task.id, task.status)}
-                    onDelete={() => deleteTask(task.id)}
-                    onUpdate={(updates: Partial<Task>) => updateTask(task.id, updates)}
-                  />
-                ))}
-              </div>
             )}
           </>
 

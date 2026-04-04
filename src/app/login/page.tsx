@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [confirmSent, setConfirmSent] = useState(false);
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle, signInWithMicrosoft } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,12 +63,12 @@ export default function LoginPage() {
             P
           </div>
           <h1 className="text-3xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>Pulse</h1>
-          <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>Never miss a follow-up</p>
+          <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>Your personal EA — free for 3 months</p>
         </div>
 
         {/* Google sign-in */}
         <button onClick={signInWithGoogle}
-          className="w-full py-3 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-3 mb-4"
+          className="w-full py-3 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-3 mb-3"
           style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
           <svg width="18" height="18" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -77,6 +77,19 @@ export default function LoginPage() {
             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
           </svg>
           Continue with Google
+        </button>
+
+        {/* Microsoft sign-in */}
+        <button onClick={signInWithMicrosoft}
+          className="w-full py-3 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-3 mb-4"
+          style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+          <svg width="18" height="18" viewBox="0 0 23 23">
+            <path fill="#f25022" d="M0 0h11v11H0z"/>
+            <path fill="#00a4ef" d="M12 0h11v11H12z"/>
+            <path fill="#7fba00" d="M0 12h11v11H0z"/>
+            <path fill="#ffb900" d="M12 12h11v11H12z"/>
+          </svg>
+          Continue with Microsoft
         </button>
 
         {/* Divider */}

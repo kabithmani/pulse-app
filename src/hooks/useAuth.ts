@@ -58,10 +58,22 @@ export function useAuth() {
     return data;
   }, []);
 
+  const signInWithMicrosoft = useCallback(async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`,
+        scopes: 'email openid profile offline_access Calendars.ReadWrite',
+      },
+    });
+    if (error) throw error;
+    return data;
+  }, []);
+
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   }, []);
 
-  return { user, loading, signUp, signIn, signInWithGoogle, signOut };
+  return { user, loading, signUp, signIn, signInWithGoogle, signInWithMicrosoft, signOut };
 }

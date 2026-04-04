@@ -3,8 +3,8 @@
 import { useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 
-const TRIAL_DAYS = 180; // 6 months
-const PRICE_INR = 170;
+const TRIAL_DAYS = 90; // 3 months
+const PRICE_INR = 199;
 
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'unknown';
 
