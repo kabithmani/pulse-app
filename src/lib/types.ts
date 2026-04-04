@@ -32,6 +32,7 @@ export interface Contact {
   phone?: string;
   notes?: string;
   avatar_url?: string;
+  last_interaction_date?: string;
   created_at: string;
   updated_at: string;
 }
