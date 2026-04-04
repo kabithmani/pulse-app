@@ -24,6 +24,9 @@ export default function DashboardPage() {
   const [view, setView] = useState<ViewMode>('ea');
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showWebhook, setShowWebhook] = useState(false);
+  const [webhookKey, setWebhookKey] = useState<string | null>(null);
+  const [webhookCopied, setWebhookCopied] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
 
   const {
@@ -60,6 +63,25 @@ export default function DashboardPage() {
   const noDate = useMemo(() => scoredTasks.filter(t => t.risk === 'no_date'), [scoredTasks]);
 
   const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'there';
+
+  const fetchWebhookKey = async () => {
+    if (!user) return;
+    try {
+      const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
+      const res = await fetch('/api/webhook/keygen', {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      const json = await res.json();
+      setWebhookKey(json.zapier_url || null);
+    } catch { setWebhookKey(null); }
+  };
+
+  const copyWebhook = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setWebhookCopied(true);
+      setTimeout(() => setWebhookCopied(false), 2000);
+    });
+  };
   const eaInsight = useMemo(
     () => generateEAInsight(tasks, displayName),
     [tasks, displayName]
@@ -147,6 +169,11 @@ export default function DashboardPage() {
                       </p>
                       <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{user.email}</p>
                     </div>
+                    <button onClick={() => { setShowWebhook(true); setShowMenu(false); fetchWebhookKey(); }}
+                      className="w-full text-left px-3 py-2 text-sm"
+                      style={{ color: 'var(--text-primary)' }}>
+                      🔗 Webhook / Zapier
+                    </button>
                     <button onClick={() => { signOut(); setShowMenu(false); }}
                       className="w-full text-left px-3 py-2 text-sm"
                       style={{ color: 'var(--danger)' }}>
@@ -310,6 +337,74 @@ export default function DashboardPage() {
         style={{ background: 'var(--accent)', boxShadow: '0 4px 20px rgba(0,122,255,0.35)' }}>
         +
       </button>
+
+      {/* ── Webhook Modal ── */}
+      {showWebhook && (
+        <>
+          <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={() => setShowWebhook(false)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 rounded-2xl p-6 max-w-lg mx-auto shadow-2xl"
+            style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>🔗 Webhook API</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>Connect Zapier, Make, or Pabbly to auto-create tasks</p>
+              </div>
+              <button onClick={() => setShowWebhook(false)} style={{ color: 'var(--text-tertiary)' }}>✕</button>
+            </div>
+
+            {!webhookKey ? (
+              <div className="py-4 text-center">
+                <div className="w-6 h-6 border-2 rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+                <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>Generating your key...</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>YOUR WEBHOOK URL (for Zapier / Make / Pabbly)</p>
+                  <div className="flex gap-2">
+                    <div className="flex-1 text-xs px-3 py-2 rounded-lg font-mono break-all"
+                      style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+                      {webhookKey}
+                    </div>
+                    <button onClick={() => copyWebhook(webhookKey)}
+                      className="px-3 py-2 rounded-lg text-xs font-medium text-white shrink-0"
+                      style={{ background: webhookCopied ? '#1D9E75' : 'var(--accent)' }}>
+                      {webhookCopied ? '✓ Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl p-4 space-y-2" style={{ background: 'var(--bg-secondary)' }}>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>HOW TO USE IN ZAPIER</p>
+                  <p className="text-xs" style={{ color: 'var(--text-primary)' }}>1. Add a "Webhooks by Zapier" action → POST</p>
+                  <p className="text-xs" style={{ color: 'var(--text-primary)' }}>2. Paste the URL above</p>
+                  <p className="text-xs" style={{ color: 'var(--text-primary)' }}>3. Set body: <span className="font-mono" style={{ color: 'var(--accent)' }}>{"{ \"title\": \"...\", \"type\": \"follow_up\" }"}</span></p>
+                </div>
+
+                <div className="rounded-xl p-4" style={{ background: 'var(--bg-secondary)' }}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>PAYLOAD FIELDS</p>
+                  <div className="space-y-1">
+                    {[
+                      ['title', 'required', 'Task name'],
+                      ['type', 'optional', 'task / follow_up / reminder / habit'],
+                      ['priority', 'optional', 'low / medium / high / urgent'],
+                      ['due_date', 'optional', 'e.g. 2026-04-10'],
+                      ['contact', 'optional', 'Contact name to link'],
+                      ['description', 'optional', 'Notes or context'],
+                    ].map(([field, req, desc]) => (
+                      <div key={field} className="flex gap-2 text-xs">
+                        <span className="font-mono w-20 shrink-0" style={{ color: 'var(--accent)' }}>{field}</span>
+                        <span className="w-14 shrink-0" style={{ color: req === 'required' ? '#E24B4A' : 'var(--text-tertiary)' }}>{req}</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>{desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* ── Quick Add Modal ── */}
       {showQuickAdd && (
