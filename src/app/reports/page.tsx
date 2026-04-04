@@ -19,6 +19,7 @@ type Period = '7d' | '30d' | '90d' | 'all';
 type XAxisKey = 'day' | 'dow' | 'hour' | 'type' | 'priority';
 type YMetric = 'created' | 'completed' | 'overdue' | 'completion_rate' | 'avg_time';
 type ChartType = 'bar' | 'line' | 'pie';
+type ReportTab = 'overview' | 'log';
 
 const PERIODS = [
   { label: '7 days', value: '7d', days: 7 },
@@ -160,6 +161,27 @@ function generateInsights(tasks: Task[]): string[] {
   return ins.slice(0, 7);
 }
 
+function exportCSV(tasks: Task[]) {
+  const headers = ['Title','Type','Priority','Status','Due Date','Created','Completed At'];
+  const rows = tasks.map(t => [
+    `"${t.title.replace(/"/g,'""')}"`,
+    t.type,
+    t.priority,
+    t.status,
+    t.due_date ? format(parseISO(t.due_date), 'yyyy-MM-dd') : '',
+    format(parseISO(t.created_at), 'yyyy-MM-dd HH:mm'),
+    t.completed_at ? format(parseISO(t.completed_at), 'yyyy-MM-dd HH:mm') : '',
+  ]);
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pulse-tasks-${format(new Date(),'yyyy-MM-dd')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function StatCard({label, value, sub, color}: {label:string; value:string|number; sub?:string; color?:string}) {
   return (
     <div className="rounded-2xl p-4" style={{background:'var(--bg-secondary)', border:'1px solid var(--border)'}}>
@@ -170,30 +192,44 @@ function StatCard({label, value, sub, color}: {label:string; value:string|number
   );
 }
 
+const TYPE_LABEL: Record<string,string> = { task:'Task', follow_up:'Follow-up', reminder:'Reminder', habit:'Habit' };
+const STATUS_COLOR: Record<string,string> = { completed:'#34C759', pending:'#007AFF', in_progress:'#FF9500' };
+
 export default function ReportsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>('30d');
   const [xAxis, setXAxis] = useState<XAxisKey>('day');
   const [yMetric, setYMetric] = useState<YMetric>('completed');
   const [chartType, setChartType] = useState<ChartType>('bar');
+  const [reportTab, setReportTab] = useState<ReportTab>('overview');
+  const [logSearch, setLogSearch] = useState('');
+  const [logFilter, setLogFilter] = useState<'all'|'completed'|'pending'|'overdue'>('all');
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => { if (!authLoading && !user) router.replace('/login'); }, [user,authLoading,router]);
 
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const p = PERIODS.find(p => p.value === period);
-    let q = supabase.from('tasks').select('*').eq('user_id', user.id).order('created_at', {ascending:false});
-    if (p && p.days > 0) q = q.gte('created_at', subDays(new Date(), p.days).toISOString());
-    const { data } = await q;
-    setTasks(data || []);
+    // Load ALL tasks for activity log
+    const { data: all } = await supabase.from('tasks').select('*').eq('user_id', user.id).order('created_at', {ascending:false});
+    setAllTasks(all || []);
     setLoading(false);
-  }, [user, period]);
+  }, [user]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Filter tasks for charts/KPIs based on period
+  const tasks = useMemo(() => {
+    const p = PERIODS.find(p => p.value === period);
+    if (!p || p.days === 0) return allTasks;
+    const cutoff = subDays(new Date(), p.days);
+    return allTasks.filter(t => parseISO(t.created_at) >= cutoff);
+  }, [allTasks, period]);
 
   const done = useMemo(() => tasks.filter(t => t.status === 'completed'), [tasks]);
   const od = useMemo(() => tasks.filter(t => t.due_date && t.status !== 'completed' && new Date(t.due_date) < new Date()), [tasks]);
@@ -207,6 +243,52 @@ export default function ReportsPage() {
   const insights = useMemo(() => generateInsights(tasks), [tasks]);
   const yLabel = Y_OPTIONS.find(y=>y.value===yMetric)?.label||'';
 
+  // Activity log filtering
+  const logTasks = useMemo(() => {
+    let base = allTasks;
+    if (logFilter === 'completed') base = base.filter(t => t.status === 'completed');
+    else if (logFilter === 'pending') base = base.filter(t => t.status !== 'completed');
+    else if (logFilter === 'overdue') base = base.filter(t => t.due_date && t.status !== 'completed' && new Date(t.due_date) < new Date());
+    if (logSearch.trim()) {
+      const q = logSearch.toLowerCase();
+      base = base.filter(t => t.title.toLowerCase().includes(q) || t.type.includes(q) || t.priority.includes(q));
+    }
+    return base;
+  }, [allTasks, logFilter, logSearch]);
+
+  const fetchAiInsight = async () => {
+    if (!user || aiLoading) return;
+    setAiLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const summary = {
+        total: tasks.length,
+        completed: done.length,
+        overdue: od.length,
+        rate,
+        avgTime,
+        types: ['task','follow_up','reminder','habit'].map(t => ({ type: t, count: tasks.filter(x=>x.type===t).length })),
+        priorities: ['urgent','high','medium','low'].map(p => ({ priority: p, count: tasks.filter(x=>x.priority===p).length })),
+        period,
+      };
+      const res = await fetch('/api/reports/ai-insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ summary }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setAiInsight(json.insight);
+      } else {
+        setAiInsight('AI insight unavailable — add your Anthropic API key in settings to enable this feature.');
+      }
+    } catch {
+      setAiInsight('Could not fetch AI insight right now. Try again later.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   if (authLoading || !user) return (
     <div className="min-h-screen flex items-center justify-center" style={{background:'var(--bg)'}}>
       <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{borderColor:'var(--accent)',borderTopColor:'transparent'}} />
@@ -218,20 +300,46 @@ export default function ReportsPage() {
       <header className="sticky top-0 z-30" style={{background:'var(--bg)',borderBottom:'1px solid var(--border)'}}>
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => router.push('/dashboard')} className="w-8 h-8 rounded-full flex items-center justify-center text-lg" style={{background:'var(--bg-secondary)',color:'var(--text-primary)'}}>‹</button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-base font-bold" style={{color:'var(--text-primary)'}}>EA Reports</h1>
             <p className="text-xs" style={{color:'var(--text-tertiary)'}}>Behavioural patterns & execution insights</p>
           </div>
+          {/* Export CSV */}
+          <button
+            onClick={() => exportCSV(reportTab === 'log' ? logTasks : tasks)}
+            title="Export to CSV"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+            style={{background:'var(--bg-secondary)', color:'var(--text-secondary)', border:'1px solid var(--border)'}}>
+            ↓ CSV
+          </button>
         </div>
-        <div className="max-w-2xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto">
-          {PERIODS.map(p => (
-            <button key={p.value} onClick={() => setPeriod(p.value as Period)}
-              className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0"
-              style={{background: period===p.value ? 'var(--accent)' : 'var(--bg-secondary)', color: period===p.value ? 'white' : 'var(--text-secondary)', border: period===p.value ? 'none' : '1px solid var(--border)'}}>
-              {p.label}
+
+        {/* Report tabs */}
+        <div className="max-w-2xl mx-auto px-4 flex border-t" style={{borderColor:'var(--border)'}}>
+          {([{key:'overview',label:'📊 Overview'},{key:'log',label:'📋 Activity Log'}] as {key:ReportTab,label:string}[]).map(({key,label}) => (
+            <button key={key} onClick={() => setReportTab(key)}
+              className="flex-1 py-2.5 text-xs font-semibold text-center"
+              style={{
+                color: reportTab===key ? 'var(--accent)' : 'var(--text-secondary)',
+                borderBottom: reportTab===key ? '2px solid var(--accent)' : '2px solid transparent',
+              }}>
+              {label}
             </button>
           ))}
         </div>
+
+        {/* Period filter (overview only) */}
+        {reportTab === 'overview' && (
+          <div className="max-w-2xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto">
+            {PERIODS.map(p => (
+              <button key={p.value} onClick={() => setPeriod(p.value as Period)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0"
+                style={{background: period===p.value ? 'var(--accent)' : 'var(--bg-secondary)', color: period===p.value ? 'white' : 'var(--text-secondary)', border: period===p.value ? 'none' : '1px solid var(--border)'}}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       <main className="max-w-2xl mx-auto px-4 pb-24 space-y-5 pt-4">
@@ -240,7 +348,7 @@ export default function ReportsPage() {
             <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{borderColor:'var(--accent)',borderTopColor:'transparent'}} />
             <p className="text-sm" style={{color:'var(--text-tertiary)'}}>Analysing your patterns...</p>
           </div>
-        ) : (<>
+        ) : reportTab === 'overview' ? (<>
 
           {/* KPIs */}
           <div className="grid grid-cols-2 gap-3">
@@ -250,13 +358,25 @@ export default function ReportsPage() {
             <StatCard label="Avg. Time" value={avgTime>0?`${avgTime}h`:'—'} sub="create → complete" />
           </div>
 
-          {/* Insights */}
+          {/* EA Insights */}
           <div className="rounded-2xl overflow-hidden" style={{border:'1px solid var(--border)'}}>
-            <div className="px-4 py-3" style={{background:'var(--accent)'}}>
+            <div className="px-4 py-3 flex items-center justify-between" style={{background:'var(--accent)'}}>
               <p className="text-xs font-bold text-white uppercase tracking-wide">🤖 EA Behavioural Insights</p>
+              <button
+                onClick={fetchAiInsight}
+                disabled={aiLoading}
+                className="text-xs text-white opacity-80 hover:opacity-100 px-2 py-1 rounded-lg border border-white/30 disabled:opacity-50">
+                {aiLoading ? 'Thinking…' : '✨ AI Deep Read'}
+              </button>
             </div>
+            {aiInsight && (
+              <div className="px-4 py-3" style={{background:'rgba(0,122,255,0.05)', borderBottom:'1px solid var(--border)'}}>
+                <p className="text-xs font-semibold mb-1" style={{color:'var(--accent)'}}>✨ Claude's personalised analysis</p>
+                <p className="text-sm leading-relaxed" style={{color:'var(--text-primary)'}}>{aiInsight}</p>
+              </div>
+            )}
             {insights.map((ins,i) => (
-              <div key={i} className="px-4 py-3" style={{borderTop: i>0 ? '1px solid var(--border)' : 'none', background:'var(--bg)'}}>
+              <div key={i} className="px-4 py-3" style={{borderTop: i>0 || aiInsight ? '1px solid var(--border)' : 'none', background:'var(--bg)'}}>
                 <p className="text-sm leading-relaxed" style={{color:'var(--text-primary)'}}>{ins}</p>
               </div>
             ))}
@@ -390,7 +510,94 @@ export default function ReportsPage() {
             })}
           </div>
 
-        </>)}
+        </>) : (
+          /* ── Activity Log Tab ── */
+          <>
+            {/* Search + filter */}
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                placeholder="Search activity…"
+                value={logSearch}
+                onChange={e => setLogSearch(e.target.value)}
+                className="flex-1 px-3 py-2 rounded-xl text-sm outline-none"
+                style={{background:'var(--bg-secondary)', color:'var(--text-primary)', border:'1px solid var(--border)'}}
+              />
+            </div>
+            <div className="flex gap-2 overflow-x-auto">
+              {([
+                {key:'all',label:`All (${allTasks.length})`},
+                {key:'completed',label:`Done (${allTasks.filter(t=>t.status==='completed').length})`},
+                {key:'pending',label:`Pending (${allTasks.filter(t=>t.status!=='completed').length})`},
+                {key:'overdue',label:`Overdue (${allTasks.filter(t=>t.due_date&&t.status!=='completed'&&new Date(t.due_date)<new Date()).length})`},
+              ] as {key:typeof logFilter,label:string}[]).map(f => (
+                <button key={f.key} onClick={() => setLogFilter(f.key)}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0"
+                  style={{background:logFilter===f.key?'var(--accent)':'var(--bg-secondary)', color:logFilter===f.key?'white':'var(--text-secondary)', border:logFilter===f.key?'none':'1px solid var(--border)'}}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {logTasks.length === 0 ? (
+              <div className="py-16 text-center">
+                <p className="text-sm" style={{color:'var(--text-tertiary)'}}>No tasks match your filter</p>
+              </div>
+            ) : (
+              <div className="rounded-2xl overflow-hidden" style={{border:'1px solid var(--border)'}}>
+                {logTasks.map((task, i) => {
+                  const isOverdue = task.due_date && task.status !== 'completed' && new Date(task.due_date) < new Date();
+                  const statusColor = task.status === 'completed' ? '#34C759' : isOverdue ? '#FF3B30' : '#007AFF';
+                  const statusLabel = task.status === 'completed' ? 'Done' : isOverdue ? 'Overdue' : 'Pending';
+                  return (
+                    <div key={task.id} className="px-4 py-3" style={{borderTop: i > 0 ? '1px solid var(--border)' : 'none', background:'var(--bg)'}}>
+                      <div className="flex items-start gap-3">
+                        <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{background: statusColor}} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium leading-snug" style={{color:'var(--text-primary)', textDecoration: task.status==='completed'?'line-through':'none', opacity: task.status==='completed'?0.7:1}}>
+                            {task.title}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                              style={{background: TYPE_COLOR[task.type]+'18', color: TYPE_COLOR[task.type]}}>
+                              {TYPE_LABEL[task.type] || task.type}
+                            </span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize"
+                              style={{background: PRIORITY_COLOR[task.priority]+'18', color: PRIORITY_COLOR[task.priority]}}>
+                              {task.priority}
+                            </span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                              style={{background: statusColor+'18', color: statusColor}}>
+                              {statusLabel}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-3 mt-1">
+                            <span className="text-[11px]" style={{color:'var(--text-tertiary)'}}>
+                              Created {format(parseISO(task.created_at), 'MMM d, yyyy')}
+                            </span>
+                            {task.due_date && (
+                              <span className="text-[11px]" style={{color: isOverdue ? '#FF3B30' : 'var(--text-tertiary)'}}>
+                                Due {format(parseISO(task.due_date), 'MMM d')}
+                              </span>
+                            )}
+                            {task.completed_at && (
+                              <span className="text-[11px]" style={{color:'#34C759'}}>
+                                ✓ {format(parseISO(task.completed_at), 'MMM d')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-xs text-center pb-4" style={{color:'var(--text-tertiary)'}}>
+              Showing {logTasks.length} of {allTasks.length} total tasks
+            </p>
+          </>
+        )}
       </main>
     </div>
   );

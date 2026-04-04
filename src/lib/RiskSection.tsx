@@ -13,9 +13,11 @@ interface RiskSectionProps {
   onToggle: (id: string, status: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Task>) => void;
+  myDay?: Set<string>;
+  onToggleMyDay?: (id: string) => void;
 }
 
-export default function RiskSection({ title, icon, tasks, accentColor, emptyMessage, onToggle, onDelete, onUpdate }: RiskSectionProps) {
+export default function RiskSection({ title, icon, tasks, accentColor, emptyMessage, onToggle, onDelete, onUpdate, myDay, onToggleMyDay }: RiskSectionProps) {
   if (tasks.length === 0 && emptyMessage) return null;
   if (tasks.length === 0) return null;
 
@@ -49,6 +51,8 @@ export default function RiskSection({ title, icon, tasks, accentColor, emptyMess
               onToggle={() => onToggle(task.id, task.status)}
               onDelete={() => onDelete(task.id)}
               onUpdate={(updates: Partial<Task>) => onUpdate(task.id, updates)}
+              myDay={myDay ? myDay.has(task.id) : false}
+              onToggleMyDay={onToggleMyDay ? () => onToggleMyDay(task.id) : undefined}
             />
           </div>
         ))}

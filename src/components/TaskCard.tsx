@@ -10,6 +10,8 @@ interface TaskCardProps {
   onToggle: () => void;
   onDelete: () => void;
   onUpdate: (updates: Partial<Task>) => void;
+  myDay?: boolean;
+  onToggleMyDay?: () => void;
 }
 
 const typeConfig = {
@@ -28,7 +30,7 @@ const priorityConfig = {
 
 const SWIPE_THRESHOLD = 72;
 
-export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCardProps) {
+export default function TaskCard({ task, onToggle, onDelete, onUpdate, myDay, onToggleMyDay }: TaskCardProps) {
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [swipeX, setSwipeX] = useState(0);
@@ -276,22 +278,31 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
           </div>
         )}
         {showActions && (
-          <div className="flex justify-end gap-2 mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
-            <button onClick={handleEditOpen}
-              className="text-xs px-3 py-1.5 rounded-lg font-medium"
-              style={{ background: '#E5F1FF', color: '#007AFF' }}>
-              Edit
-            </button>
-            <button onClick={(e) => { e.stopPropagation(); onToggle(); setShowActions(false); }}
-              className="text-xs px-3 py-1.5 rounded-lg font-medium"
-              style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-              {isCompleted ? 'Reopen' : 'Complete'}
-            </button>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowActions(false); }}
-              className="text-xs px-3 py-1.5 rounded-lg font-medium"
-              style={{ background: '#FFF0EF', color: 'var(--danger)' }}>
-              Delete
-            </button>
+          <div className="flex justify-between gap-2 mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+            {onToggleMyDay && (
+              <button onClick={(e) => { e.stopPropagation(); onToggleMyDay(); }}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                style={{ background: myDay ? '#FFF7ED' : 'var(--bg-secondary)', color: myDay ? '#FF9500' : 'var(--text-secondary)' }}>
+                {myDay ? '☀️ In My Day' : '☀️ My Day'}
+              </button>
+            )}
+            <div className="flex gap-2 ml-auto">
+              <button onClick={handleEditOpen}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                style={{ background: '#E5F1FF', color: '#007AFF' }}>
+                Edit
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); onToggle(); setShowActions(false); }}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                {isCompleted ? 'Reopen' : 'Complete'}
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); onDelete(); setShowActions(false); }}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                style={{ background: '#FFF0EF', color: 'var(--danger)' }}>
+                Delete
+              </button>
+            </div>
           </div>
         )}
       </div>
