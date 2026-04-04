@@ -3,6 +3,7 @@
 import { Contact, Task } from '@/lib/types';
 import { format, differenceInDays } from 'date-fns';
 import { useState } from 'react';
+import PhotoGallery from '@/components/PhotoGallery';
 
 interface PeopleViewProps {
   contacts: Contact[];
@@ -251,6 +252,11 @@ export default function PeopleView({ contacts, tasks, onUpdateTask, onCreateTask
                     </p>
                   </div>
                 )}
+
+                {/* Photo gallery per contact */}
+                <div className="px-4 pb-4 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+                  <PhotoGallery entityType="contact" entityId={contact.id} />
+                </div>
               </div>
             )}
           </div>

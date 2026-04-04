@@ -3,6 +3,7 @@
 import { Task, TaskType, TaskPriority } from '@/lib/types';
 import { format, isPast, isToday } from 'date-fns';
 import { useState, useRef } from 'react';
+import PhotoGallery from '@/components/PhotoGallery';
 
 interface TaskCardProps {
   task: Task;
@@ -269,6 +270,11 @@ export default function TaskCard({ task, onToggle, onDelete, onUpdate }: TaskCar
             </div>
           </div>
         </div>
+        {showActions && (
+          <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+            <PhotoGallery entityType="task" entityId={task.id} />
+          </div>
+        )}
         {showActions && (
           <div className="flex justify-end gap-2 mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
             <button onClick={handleEditOpen}
