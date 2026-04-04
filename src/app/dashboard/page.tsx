@@ -15,6 +15,8 @@ import { scoreAllTasks, generateEAInsight } from '@/lib/riskEngine';
 import { useTaskAlerts, requestNotificationPermission } from '@/hooks/useTaskAlerts';
 import AlertToast from '@/hooks/AlertToast';
 import { Task } from '@/lib/types';
+import { useSubscription } from '@/hooks/useSubscription';
+import SubscriptionBanner from '@/components/SubscriptionBanner';
 
 type ViewMode = 'ea' | 'all' | 'people';
 
@@ -63,6 +65,7 @@ export default function DashboardPage() {
   const noDate = useMemo(() => scoredTasks.filter(t => t.risk === 'no_date'), [scoredTasks]);
 
   const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'there';
+  const sub = useSubscription(user);
 
   const fetchWebhookKey = async () => {
     if (!user) return;
@@ -101,6 +104,9 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+
+      {/* ── Subscription Banner ── */}
+      <SubscriptionBanner sub={sub} />
 
       {/* ── Error Banner ── */}
       {taskError && (

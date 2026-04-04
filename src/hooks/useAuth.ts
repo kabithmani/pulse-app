@@ -28,7 +28,13 @@ export function useAuth() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: name } },
+      options: {
+        data: {
+          display_name: name,
+          trial_started_at: new Date().toISOString(),
+          subscription_status: 'trial', // trial | active | expired
+        },
+      },
     });
     if (error) throw error;
     return data;
